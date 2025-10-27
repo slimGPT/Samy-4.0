@@ -1,0 +1,20 @@
+{
+  "name": "samy-prototype",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "pnpm --filter @apps/web dev",
+    "dev:api": "pnpm --filter @apps/api dev",
+    "build": "pnpm -r build",
+    "install:all": "pnpm install"
+  },
+  "packageManager": "pnpm@8.15.0",
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}
+

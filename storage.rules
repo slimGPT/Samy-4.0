@@ -1,0 +1,11 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Dev-friendly rules - allow all read/write until 2030
+    // Replace with proper authentication rules in production
+    match /{allPaths=**} {
+      allow read, write: if request.time < timestamp.date(2030, 1, 1);
+    }
+  }
+}
+
