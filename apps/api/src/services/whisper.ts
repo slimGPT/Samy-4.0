@@ -84,7 +84,7 @@ export async function transcribeAudioSimple(audioFilePath: string): Promise<stri
     if (!process.env.OPENAI_API_KEY) {
       throw new Error('OPENAI_API_KEY is not configured');
     }
-
+    
     console.log(`🎧 Transcribing file: ${audioFilePath}`);
     
     // Check if file exists
@@ -102,32 +102,43 @@ export async function transcribeAudioSimple(audioFilePath: string): Promise<stri
       fileToTranscribe = convertedPath;
     }
 
-    const audioFile = fs.createReadStream(fileToTranscribe);
+    // Retry logic for connection errors (3 attempts with exponential backoff)
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY = 1000; // ms
+    
+    const attemptTranscription = async (model: string, retryCount: number = 0): Promise<any> => {
+      try {
+        const audioStream = fs.createReadStream(fileToTranscribe);
+        return await openai.audio.transcriptions.create({
+          file: audioStream,
+          model: model,
+          response_format: 'text',
+          language: 'en',
+        });
+      } catch (error: any) {
+        const isConnectionError = error.code === 'ECONNRESET' || 
+                                  error.message?.includes('Connection error') ||
+                                  error.message?.includes('ECONNRESET');
+        
+        if (isConnectionError && retryCount < MAX_RETRIES) {
+          console.log(`⚠️ Connection error, retrying (${retryCount + 1}/${MAX_RETRIES})...`);
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * (retryCount + 1)));
+          return attemptTranscription(model, retryCount + 1);
+        }
+        
+        throw error;
+      }
+    };
 
-    // Try gpt-4o-mini-transcribe first, fallback to whisper-1
+    // Try whisper-1 (primary model)
     let transcription: any;
     try {
-      console.log('Attempting transcription with gpt-4o-mini-transcribe...');
-      transcription = await openai.audio.transcriptions.create({
-        file: audioFile,
-        model: 'gpt-4o-mini-transcribe',
-        response_format: 'text',
-        language: 'en',
-      });
-      console.log('✅ Used gpt-4o-mini-transcribe');
-    } catch (primaryError: any) {
-      console.log('⚠️ gpt-4o-mini-transcribe failed, falling back to whisper-1');
-      console.log('Primary error:', primaryError.message);
-      
-      // Recreate the file stream since it was consumed
-      const audioFileFallback = fs.createReadStream(fileToTranscribe);
-      transcription = await openai.audio.transcriptions.create({
-        file: audioFileFallback,
-        model: 'whisper-1',
-        response_format: 'text',
-        language: 'en',
-      });
-      console.log('✅ Used whisper-1 fallback');
+      console.log('🎙️ Attempting transcription with whisper-1...');
+      transcription = await attemptTranscription('whisper-1');
+      console.log('✅ Transcription successful with whisper-1');
+    } catch (error: any) {
+      console.error('❌ Whisper-1 transcription failed');
+      throw error;
     }
 
     // Clean up converted file
@@ -136,7 +147,7 @@ export async function transcribeAudioSimple(audioFilePath: string): Promise<stri
       console.log('🧹 Cleaned up converted MP3 file');
     }
 
-    console.log(`✅ Transcription successful: "${transcription}"`);
+    console.log(`✅ Transcription: "${transcription}"`);
 
     return transcription as unknown as string;
   } catch (error: any) {
@@ -154,8 +165,8 @@ export async function transcribeAudioSimple(audioFilePath: string): Promise<stri
       code: error.code,
     });
     
-    // Re-throw with the full error object for better debugging
-    const enhancedError: any = new Error(`Failed to transcribe audio: ${error.message}`);
+    // Re-throw with clear error message
+    const enhancedError: any = new Error(`Whisper transcription failed: ${error.message}`);
     enhancedError.originalError = error;
     enhancedError.details = error.response?.data || error;
     throw enhancedError;
