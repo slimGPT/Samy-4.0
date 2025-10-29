@@ -99,7 +99,7 @@ if (fs.existsSync(webEnvPath)) {
 } else {
   error('apps/web/.env.local file not found!');
   info('  Create .env.local in apps/web/ directory');
-  info('  See ENV_REFERENCE.md for the complete template');
+  info('  See ENV_REFERENCE.md or ENV_SETUP.md for the complete template');
   allGood = false;
 }
 

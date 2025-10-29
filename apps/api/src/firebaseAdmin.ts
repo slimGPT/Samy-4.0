@@ -1,22 +1,22 @@
-import admin from 'firebase-admin';
-import dotenv from 'dotenv';
+/**
+ * Firebase Admin SDK - Legacy export
+ * This file re-exports from the new location for backward compatibility
+ * 
+ * New code should import from: './lib/firebaseAdmin'
+ */
 
-dotenv.config({ path: '../../.env' });
+export {
+  db,
+  storage,
+  default as admin,
+  getUser,
+  updateUser,
+  getAllEmotions,
+  getEmotion,
+  getSession,
+  updateSession,
+  logSession
+} from './lib/firebaseAdmin';
 
-const serviceAccount = {
-  projectId: process.env.FIREBASE_PROJECT_ID,
-  clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-  privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-};
-
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
-  });
-}
-
-export const db = admin.firestore();
-export const storage = admin.storage();
-
-export default admin;
+console.log('⚠️ Importing from legacy firebaseAdmin.ts - consider updating to ./lib/firebaseAdmin');
 

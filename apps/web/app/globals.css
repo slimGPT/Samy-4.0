@@ -26,3 +26,17 @@ body {
     rgb(var(--background-start-rgb));
 }
 
+/* Shimmer animation for energy bar */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite;
+}
+

@@ -5,8 +5,8 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Samy Prototype',
-  description: 'Minimal 3D avatar state viewer',
+  title: 'Candy - Your AI Girlfriend',
+  description: 'Voice chat with Candy, your sweet AI girlfriend',
 }
 
 export default function RootLayout({

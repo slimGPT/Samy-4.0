@@ -1,115 +1,47 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { ensureAnonAuth, ensureState, subscribeState, patchPhase } from '@/lib/firebase';
-import type { SessionState } from '@packages/shared';
+/**
+ * FULL MODE - Candy AI Web Interface
+ * Complete experience with emotions, neon styling, and dynamic energy bar
+ * 🎤 ElevenLabs STT → 🧠 GPT-4o → 🎭 Emotion Engine → 🗣️ ElevenLabs TTS → 🔥 Firebase
+ */
+
+import { useState, useRef } from 'react';
+
+interface EmotionState {
+  emotion: string;
+  energy: number;
+  phase: 'listening' | 'thinking' | 'speaking';
+}
 
 export default function Home() {
-  const [sessionId] = useState('demo-session');
-  const [state, setState] = useState<SessionState | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [transcript, setTranscript] = useState<string>('');
   const [reply, setReply] = useState<string>('');
   const [error, setError] = useState<string>('');
-  const [isConnected, setIsConnected] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
+  const [metrics, setMetrics] = useState<any>(null);
+  const [emotionState, setEmotionState] = useState<EmotionState>({
+    emotion: 'neutral',
+    energy: 0.75,
+    phase: 'listening',
+  });
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const recordingStartTimeRef = useRef<number | null>(null);
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
   
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
   const MIN_RECORDING_TIME = 800; // milliseconds
-
-  /**
-   * Centralized phase update utility with debug logging
-   */
-  const updatePhase = async (newPhase: 'listening' | 'thinking' | 'speaking') => {
-    const timestamp = new Date().toISOString().split('T')[1].slice(0, -1);
-    console.log(`[${timestamp}] 🔄 Phase transition: ${state?.phase || 'unknown'} → ${newPhase}`);
-    
-    try {
-      await patchPhase(sessionId, newPhase);
-      console.log(`[${timestamp}] ✅ Phase updated to: ${newPhase}`);
-    } catch (error: any) {
-      console.error(`[${timestamp}] ❌ Failed to update phase to ${newPhase}:`, error);
-    }
-  };
-
-  // Auto-initialize on mount
-  useEffect(() => {
-    let unsubscribe: (() => void) | null = null;
-
-    async function initialize() {
-      try {
-        console.log('🔐 Authenticating...');
-        await ensureAnonAuth();
-        
-        console.log('📝 Ensuring session state...');
-        await ensureState(sessionId);
-        
-        console.log('🔔 Subscribing to state updates...');
-        unsubscribe = subscribeState(
-          sessionId,
-          (newState) => {
-            setState(newState);
-            setIsConnected(true);
-      },
-      (err) => {
-            console.error('Subscription error:', err);
-            setError(`Connection error: ${err.message}`);
-            setIsConnected(false);
-          }
-        );
-        
-        console.log('✅ Initialization complete');
-      } catch (err: any) {
-        console.error('Initialization error:', err);
-        setError(`Failed to initialize: ${err.message}`);
-      }
-    }
-
-    initialize();
-
-    return () => {
-      if (unsubscribe) {
-        unsubscribe();
-      }
-    };
-  }, [sessionId]);
-
-  // Recording duration timer
-  useEffect(() => {
-    let timer: NodeJS.Timeout | null = null;
-    
-    if (isRecording && recordingStartTimeRef.current) {
-      const startTime = recordingStartTimeRef.current;
-      
-      // Update immediately
-      setRecordingDuration((Date.now() - startTime) / 1000);
-      
-      // Then update every 100ms for smooth animation
-      timer = setInterval(() => {
-        setRecordingDuration((Date.now() - startTime) / 1000);
-      }, 100);
-    } else {
-      // Reset duration when not recording
-      setRecordingDuration(0);
-    }
-
-    // Cleanup function - prevents memory leaks
-    return () => {
-      if (timer) {
-        clearInterval(timer);
-      }
-    };
-  }, [isRecording]); // Re-run when recording state changes
 
   const startRecording = async () => {
     try {
+      console.log('🎤 Starting recording...');
+      setEmotionState(prev => ({ ...prev, phase: 'listening' }));
+      
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       
       // Try to use the most compatible format
@@ -128,7 +60,7 @@ export default function Home() {
         if (MediaRecorder.isTypeSupported(format.mime)) {
           mimeType = format.mime;
           extension = format.ext;
-          console.log(`Using audio format: ${mimeType}`);
+          console.log(`✅ Using format: ${mimeType}`);
           break;
         }
       }
@@ -138,17 +70,22 @@ export default function Home() {
       audioChunksRef.current = [];
 
       const startTime = Date.now();
+      recordingStartTimeRef.current = startTime;
+
+      // Update recording duration every 100ms
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingDuration((Date.now() - startTime) / 1000);
+      }, 100);
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data);
-          console.log(`Audio chunk: ${event.data.size} bytes`);
         }
       };
 
       mediaRecorder.onstop = async () => {
         const recordingDuration = (Date.now() - startTime) / 1000;
-        console.log(`Recording duration: ${recordingDuration.toFixed(2)} seconds`);
+        console.log(`⏹️ Recording duration: ${recordingDuration.toFixed(2)}s`);
 
         if (recordingDuration < 0.5) {
           stream.getTracks().forEach(track => track.stop());
@@ -159,408 +96,185 @@ export default function Home() {
         const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
         stream.getTracks().forEach(track => track.stop());
         
-        console.log(`Audio recorded: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
+        console.log(`📦 Audio blob size: ${audioBlob.size} bytes`);
         
         if (audioBlob.size < 1000) {
-          setError('Recording too short or no audio captured. Please try again and speak louder.');
-      return;
-    }
+          setError('Recording too short or no audio captured. Please try again.');
+          return;
+        }
 
-        await processTalk(audioBlob, extension);
+        await processPipeline(audioBlob, extension);
       };
 
-      // Request data in 100ms chunks
       mediaRecorder.start(100);
-      recordingStartTimeRef.current = Date.now();
-      setIsRecording(true); // This triggers the useEffect timer
-      console.log('🎤 Recording started...');
-      
-      // Update Firestore to 'listening' phase
-      await updatePhase('listening');
-      
+      setIsRecording(true);
       setTranscript('');
       setReply('');
       setError('');
     } catch (err: any) {
-      console.error('Error starting recording:', err);
-      setError(`Microphone error: ${err.message}`);
-      await updatePhase('listening');
+      console.error('❌ Recording error:', err);
+      setError(`Microphone access failed: ${err.message}`);
     }
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      // Check if recording was long enough
-      const recordingDuration = Date.now() - (recordingStartTimeRef.current || 0);
-      
-      if (recordingDuration < MIN_RECORDING_TIME) {
-        console.warn(`⚠️ Recording too short: ${recordingDuration}ms`);
-        
-        // Cancel the recording
-        if (mediaRecorderRef.current.state !== 'inactive') {
-          mediaRecorderRef.current.stop();
-        }
-        
-        // Stop all tracks
-        if (mediaRecorderRef.current.stream) {
-          mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
-        }
-        
-        setIsRecording(false); // This triggers useEffect cleanup
-        recordingStartTimeRef.current = null;
-        
-        // Show funny error message
-        setError('You gotta say *something*, babe 😘');
-        
-        // Clear error after 3 seconds
-        setTimeout(() => setError(''), 3000);
-        
-        return;
-      }
-      
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      console.log('🛑 Stopping recording...');
       mediaRecorderRef.current.stop();
-      setIsRecording(false); // This triggers useEffect cleanup
-      recordingStartTimeRef.current = null;
-    }
-  };
-
-  // Helper: Fetch with timeout
-  const fetchWithTimeout = async (url: string, options: RequestInit, timeoutMs: number = 30000) => {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-    
-    try {
-      const response = await fetch(url, {
-        ...options,
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-      return response;
-    } catch (error: any) {
-      clearTimeout(timeoutId);
-      if (error.name === 'AbortError') {
-        throw new Error('Request timed out');
+      setIsRecording(false);
+      
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
       }
-      throw error;
     }
   };
 
-  const processTalk = async (audioBlob: Blob, extension: string = 'webm') => {
+  const processPipeline = async (audioBlob: Blob, extension: string) => {
     setIsProcessing(true);
-    
+    setEmotionState(prev => ({ ...prev, phase: 'thinking' }));
+    setError('');
+
     try {
-      // Validate audio blob before sending
-      if (!audioBlob || audioBlob.size === 0) {
-        console.error('❌ Empty audio blob - nothing to transcribe');
-        setError('No audio recorded. Please try again.');
-        setIsProcessing(false);
-        await updatePhase('listening');
-        return;
-      }
+      const pipelineStartTime = Date.now();
 
-      if (audioBlob.size < 1000) {
-        console.warn(`⚠️ Audio blob too small: ${audioBlob.size} bytes`);
-        setError('Recording too short. Please speak longer.');
-        setIsProcessing(false);
-        await updatePhase('listening');
-        return;
-      }
-
-      // Step 1: Transcribe audio (60s timeout - OpenAI can be slow)
-      console.log(`🎧 Step 1: Transcribing audio (${audioBlob.size} bytes, ${audioBlob.type})...`);
-      console.log(`🌐 API endpoint: ${API_URL}/listen`);
-      console.log(`⏱️ Timeout: 60 seconds`);
-      const transcriptionStartTime = Date.now();
+      // Step 1: Transcribe audio
+      console.log('\n🎤 [ELEVENLABS-STT] Sending audio for transcription...');
+      const listenStartTime = Date.now();
       
       const formData = new FormData();
-      formData.append('file', audioBlob, `recording.${extension}`);
+      formData.append('audio', audioBlob, `recording.${extension}`);
 
-      let listenRes: Response;
-      try {
-        listenRes = await fetchWithTimeout(`${API_URL}/listen`, {
-          method: 'POST',
-          body: formData,
-        }, 60000); // 60 second timeout - OpenAI Whisper can be slow
-        console.log(`⏱️ Transcription request completed in ${Date.now() - transcriptionStartTime}ms`);
-      } catch (fetchError: any) {
-        console.error('❌ Transcription error:', fetchError.message);
-        if (fetchError.message.includes('timeout')) {
-          setError('Transcription timed out. Please try again.');
-        } else {
-          setError(`Can't reach API server. Is it running?`);
-        }
-        setIsProcessing(false);
-        await updatePhase('listening');
-        return;
-      }
+      const listenRes = await fetch(`${API_URL}/listen`, {
+        method: 'POST',
+        body: formData,
+      });
 
       if (!listenRes.ok) {
-        let errorData: any = { error: 'Unknown error' };
-        try {
-          errorData = await listenRes.json();
-        } catch (parseError) {
-          console.error('❌ Failed to parse error response');
-          errorData = { 
-            error: `HTTP ${listenRes.status}: ${listenRes.statusText}`,
-            message: 'Server returned non-JSON error response'
-          };
-        }
-        
-        console.error('❌ Transcription failed:', {
-          status: listenRes.status,
-          statusText: listenRes.statusText,
-          error: errorData
-        });
-        
-        // Handle 503 Service Unavailable (Whisper down)
-        if (listenRes.status === 503) {
-          setError('🎙️ Whisper unavailable — please retry.');
-          setIsProcessing(false);
-          await updatePhase('listening');
-          return;
-        }
-        
-        // User-friendly error messages for other errors
-        if (errorData.retry) {
-          setError(errorData.message || 'Please try again.');
-        } else {
-          setError(errorData.error || 'Failed to transcribe audio. Please try again.');
-        }
-        
+        const errorData = await listenRes.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('❌ [ELEVENLABS-STT] Failed:', errorData);
+        setError(errorData.error || 'Failed to transcribe audio');
         setIsProcessing(false);
-        await updatePhase('listening');
+        setEmotionState(prev => ({ ...prev, phase: 'listening' }));
         return;
       }
 
       const listenData = await listenRes.json();
+      const transcriptionDuration = Date.now() - listenStartTime;
       
-      // Validate transcription text
-      if (!listenData.text || listenData.text.trim() === '') {
-        console.warn('⚠️ Empty transcription received');
-        setError('Could not understand audio. Please speak clearly and try again.');
-        setIsProcessing(false);
-        await updatePhase('listening');
-        return;
-      }
-
-      console.log('✅ Transcription:', listenData.text);
+      console.log(`✅ [ELEVENLABS-STT] Transcribed: "${listenData.text}"`);
+      console.log(`⏱️ [ELEVENLABS-STT] Duration: ${transcriptionDuration}ms`);
       setTranscript(listenData.text);
 
-      // Update to 'thinking' phase
-      await updatePhase('thinking');
-
-      // Step 2: Get GPT response (45s timeout)
-      console.log('🤖 Step 2: Getting GPT response...');
-      let chatRes: Response;
-      try {
-        chatRes = await fetchWithTimeout(`${API_URL}/api/chat`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sessionId,
-            message: listenData.text,
-          }),
-        }, 45000); // 45 second timeout for GPT
-      } catch (gptError: any) {
-        console.error('❌ GPT request failed:', gptError.message);
-        if (gptError.message.includes('timeout')) {
-          setError('Candy is taking too long to respond. Please try again.');
-        } else {
-          setError('Failed to get response from Candy.');
-        }
-        setIsProcessing(false);
-        await updatePhase('listening');
-        return;
-      }
-
-      if (!chatRes.ok) {
-        const errorData = await chatRes.json().catch(() => ({ error: 'Unknown error' }));
-        console.error('❌ GPT failed:', errorData);
-        setError(`Candy couldn't respond: ${errorData.error || 'Unknown error'}`);
-        setIsProcessing(false);
-        await updatePhase('listening');
-        return;
-      }
-
-      const chatData = await chatRes.json();
-      console.log('✅ GPT response:', chatData.reply);
+      // Step 2: Get GPT response and generate speech in one call
+      console.log('\n🧠 [GPT] → 🗣️ [ELEVENLABS] Calling /talk endpoint...');
+      const talkStartTime = Date.now();
       
-      if (!chatData.reply) {
-        console.error('❌ GPT returned empty response');
-        setError('Candy had nothing to say. Please try again.');
+      const talkRes = await fetch(`${API_URL}/talk`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: listenData.text }),
+      });
+
+      if (!talkRes.ok) {
+        const errorData = await talkRes.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('❌ [TALK] Failed:', errorData);
+        setError(errorData.error || 'Failed to generate response');
         setIsProcessing(false);
-        await updatePhase('listening');
+        setEmotionState(prev => ({ ...prev, phase: 'listening' }));
         return;
+      }
+
+      const talkData = await talkRes.json();
+      const talkDuration = Date.now() - talkStartTime;
+      
+      console.log(`✅ [GPT] Response: "${talkData.reply}"`);
+      console.log(`✅ [ELEVENLABS] Voice generated: ${talkData.audioUrl}`);
+      console.log(`⏱️ [TALK] Duration: ${talkDuration}ms`);
+      
+      // Update emotion and energy from API response
+      if (talkData.emotion) {
+        console.log(`🎭 [EMOTION] ${talkData.emotion}`);
+        // Calculate energy based on emotion type (simulate dynamic energy)
+        const energyMap: Record<string, number> = {
+          flirty: 0.85,
+          playful: 0.90,
+          excited: 0.95,
+          caring: 0.70,
+          affectionate: 0.75,
+          calm: 0.60,
+          sad: 0.40,
+          angry: 0.80,
+          bitchy: 0.75,
+          curious: 0.70,
+          neutral: 0.65,
+        };
+        
+        setEmotionState({
+          emotion: talkData.emotion,
+          energy: energyMap[talkData.emotion] || 0.65,
+          phase: 'speaking',
+        });
       }
       
-      setReply(chatData.reply);
+      setReply(talkData.reply);
 
-      // Step 3: Generate speech (60s timeout - TTS can be slow)
-      console.log('🔊 Step 3: Generating speech (Arabella voice)...');
-      let speakRes: Response;
-      try {
-        speakRes = await fetchWithTimeout(`${API_URL}/api/speak`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sessionId,
-            text: chatData.reply,
-          }),
-        }, 60000); // 60 second timeout for TTS
-      } catch (ttsError: any) {
-        console.error('❌ TTS request failed:', ttsError.message);
-        console.warn('⚠️ Using browser speech synthesis as fallback');
-        speakWithBrowser(chatData.reply, sessionId);
-        return;
-      }
+      // Display metrics
+      const totalDuration = Date.now() - pipelineStartTime;
+      const metricsData = {
+        stt: transcriptionDuration,
+        gpt: talkData.metrics?.gpt || 0,
+        tts: talkData.metrics?.tts || 0,
+        total: totalDuration,
+      };
+      setMetrics(metricsData);
+      
+      console.log('\n⏱️ [METRICS] Full Pipeline:');
+      console.log(`   - ElevenLabs STT: ${metricsData.stt}ms`);
+      console.log(`   - GPT: ${metricsData.gpt}ms`);
+      console.log(`   - ElevenLabs TTS: ${metricsData.tts}ms`);
+      console.log(`   - Total: ${metricsData.total}ms`);
+      console.log(`   - Target: < 3000ms (${metricsData.total < 3000 ? '✅ PASS' : '❌ FAIL'})\n`);
 
-      if (!speakRes.ok) {
-        const errorData = await speakRes.json().catch(() => ({ error: 'Unknown error' }));
-        console.error('❌ TTS failed:', errorData);
-        console.warn('⚠️ Using browser speech synthesis as fallback');
-        speakWithBrowser(chatData.reply, sessionId);
-        return;
-      }
-
-      const speakData = await speakRes.json();
-      console.log('✅ TTS generated:', speakData.audioUrl);
-
-      // Step 4: Play the audio
-      console.log('🎵 Step 4: Playing audio...');
-      if (speakData.audioUrl) {
-        const audio = new Audio(speakData.audioUrl);
+      // Step 3: Play the audio
+      if (talkData.audioUrl) {
+        console.log('🎵 Playing audio...');
+        const audio = new Audio(talkData.audioUrl);
         currentAudioRef.current = audio;
         
-        audio.onended = async () => {
+        audio.onended = () => {
           console.log('✅ Audio playback finished');
           currentAudioRef.current = null;
-          await new Promise(resolve => setTimeout(resolve, 350));
-          await updatePhase('listening');
+          setEmotionState(prev => ({ ...prev, phase: 'listening' }));
         };
 
-        audio.onerror = async (error) => {
+        audio.onerror = (error) => {
           console.error('❌ Audio playback error:', error);
           setError('Voice playback failed');
-          setTimeout(() => setError(''), 3000);
           currentAudioRef.current = null;
-          await updatePhase('listening');
+          setEmotionState(prev => ({ ...prev, phase: 'listening' }));
         };
 
-        try {
-          await audio.play();
-          console.log('✅ Audio playing...');
-        } catch (error) {
-          console.error('❌ Failed to start audio:', error);
-          setError('Failed to play audio. Check your browser settings.');
-          setTimeout(() => setError(''), 3000);
-          await updatePhase('listening');
-        }
-      } else {
-        console.warn('⚠️ No audio URL returned');
-        await updatePhase('listening');
+        await audio.play();
+        console.log('✅ Audio playing...');
       }
     } catch (err: any) {
       console.error('❌ Pipeline error:', err);
-      
-      // Provide specific error messages based on failure point
-      let errorMessage = 'Talk error: ';
-      if (err.message.includes('transcribe')) {
-        errorMessage += 'Speech recognition failed';
-      } else if (err.message.includes('GPT')) {
-        errorMessage += 'AI response failed';
-      } else if (err.message.includes('TTS') || err.message.includes('speech')) {
-        errorMessage += 'Voice generation failed';
-      } else if (err.message.includes('play')) {
-        errorMessage += 'Audio playback failed';
-      } else if (err.message.includes('timeout')) {
-        errorMessage += 'Request timed out. Please try again.';
-      } else {
-        errorMessage += err.message || 'Unknown error';
-      }
-      
-      setError(errorMessage);
-      
-      // If TTS failed but we have a reply, use browser speech synthesis as fallback
-      if (reply && (err.message.includes('TTS') || err.message.includes('speech'))) {
-        console.log('🔊 Using browser speech synthesis fallback');
-        speakWithBrowser(reply, sessionId);
-      } else {
-        await updatePhase('listening');
-      }
-      
-      // Clear error after 5 seconds
-      setTimeout(() => setError(''), 5000);
+      setError(`Error: ${err.message || 'Unknown error'}`);
+      setEmotionState(prev => ({ ...prev, phase: 'listening' }));
     } finally {
-      // ALWAYS reset processing state - prevents app from getting stuck
       setIsProcessing(false);
-      console.log('✅ Processing state reset');
     }
   };
 
-  // Shut up button - stops audio and returns to listening state (without auto-recording)
-  const handleShutUp = async () => {
-    console.log('🤫 Shut up button pressed!');
-    
-    // Stop any playing audio
+  // Stop audio playback ("Shut up" button)
+  const handleStopAudio = () => {
     if (currentAudioRef.current) {
       currentAudioRef.current.pause();
       currentAudioRef.current.currentTime = 0;
       currentAudioRef.current = null;
-    }
-    
-    // Cancel browser speech synthesis if active
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
-    
-    // Clear reply and transcript
-    setReply('');
-    setTranscript('');
-    
-    // Return to listening state (user will manually start recording when ready)
-    await updatePhase('listening');
-  };
-
-  // Browser-based speech synthesis fallback
-  const speakWithBrowser = async (text: string, sessionId: string) => {
-    if ('speechSynthesis' in window) {
-      // Update to speaking phase
-      await updatePhase('speaking');
-      
-      const utterance = new SpeechSynthesisUtterance(text);
-      
-      // Try to find a nice voice
-      const voices = speechSynthesis.getVoices();
-      const preferredVoice = voices.find(v => 
-        v.name.includes('Google') || 
-        v.name.includes('Microsoft') ||
-        v.lang.startsWith('en')
-      );
-      
-      if (preferredVoice) {
-        utterance.voice = preferredVoice;
-      }
-      
-      utterance.rate = 1.0;
-      utterance.pitch = 1.0;
-      utterance.volume = 1.0;
-      
-      utterance.onend = async () => {
-        // Add a brief delay (350ms) for smoother UX before returning to listening
-        await new Promise(resolve => setTimeout(resolve, 350));
-        await updatePhase('listening');
-      };
-      
-      utterance.onerror = async (event) => {
-        console.error('Speech synthesis error:', event);
-        await updatePhase('listening');
-      };
-      
-      speechSynthesis.speak(utterance);
-    } else {
-      // No speech synthesis available, just go back to listening
-      console.warn('Speech synthesis not supported');
-      await updatePhase('listening');
+      setEmotionState(prev => ({ ...prev, phase: 'listening' }));
+      console.log('🤫 Audio stopped by user');
     }
   };
 
@@ -593,9 +307,8 @@ export default function Home() {
 
   // Get status color based on phase
   const getPhaseColor = () => {
-    if (!state) return 'bg-gray-400';
-    switch (state.phase) {
-      case 'listening': return 'bg-blue-500'; // No pulse when listening (calm state)
+    switch (emotionState.phase) {
+      case 'listening': return 'bg-blue-500';
       case 'thinking': return 'bg-yellow-500 animate-pulse';
       case 'speaking': return 'bg-green-500 animate-pulse';
       default: return 'bg-gray-400';
@@ -604,7 +317,7 @@ export default function Home() {
 
   // Get emotion-specific styling
   const getEmotionStyle = () => {
-    switch (state?.emotion) {
+    switch (emotionState.emotion) {
       case 'flirty':
         return {
           gradient: 'from-pink-500 via-rose-500 to-red-500',
@@ -672,6 +385,7 @@ export default function Home() {
           subtitle: 'Not in the mood for this 💢'
         };
       case 'affectionate':
+      case 'caring':
         return {
           gradient: 'from-purple-400 via-pink-400 to-rose-400',
           glow: 'shadow-lg shadow-purple-500/50',
@@ -693,6 +407,28 @@ export default function Home() {
           pulse: '',
           subtitle: 'Genuinely interested in you 🤔'
         };
+      case 'excited':
+        return {
+          gradient: 'from-orange-400 via-red-400 to-pink-400',
+          glow: 'shadow-lg shadow-orange-500/50',
+          emoji: '🤩',
+          bg: 'bg-gradient-to-br from-orange-50 to-red-50 dark:from-orange-900/20 dark:to-red-900/20',
+          text: 'text-orange-700 dark:text-orange-300',
+          borderColor: 'border-orange-400 dark:border-orange-600',
+          pulse: 'animate-bounce',
+          subtitle: 'Super pumped right now! 🤩'
+        };
+      case 'romantic':
+        return {
+          gradient: 'from-rose-400 via-pink-500 to-red-500',
+          glow: 'shadow-lg shadow-rose-500/50',
+          emoji: '💕',
+          bg: 'bg-gradient-to-br from-rose-50 to-pink-50 dark:from-rose-900/20 dark:to-pink-900/20',
+          text: 'text-rose-700 dark:text-rose-300',
+          borderColor: 'border-rose-400 dark:border-rose-600',
+          pulse: 'animate-pulse',
+          subtitle: 'Lost in the moment with you 💕'
+        };
       default:
         return {
           gradient: 'from-gray-400 to-gray-500',
@@ -710,102 +446,97 @@ export default function Home() {
   const emotionStyle = getEmotionStyle();
 
   return (
-    <main className="min-h-screen p-8 max-w-4xl mx-auto">
+    <main className="min-h-screen p-8 max-w-4xl mx-auto bg-gradient-to-br from-pink-50 via-purple-50 to-blue-50 dark:from-gray-900 dark:via-purple-900/20 dark:to-gray-900">
+      {/* Header */}
       <div className="mb-8">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-4xl font-bold mb-2">🍬 Candy</h1>
-        <p className="text-gray-600 dark:text-gray-400">
+            <p className="text-gray-600 dark:text-gray-400">
               Your sweet AI girlfriend
-        </p>
-      </div>
+            </p>
+          </div>
 
           {/* Status Indicators */}
           <div className="flex gap-3">
             {/* Connection Status */}
             <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-full">
-              <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
-              <span className="text-sm font-medium">
-                {isConnected ? 'Connected' : 'Connecting...'}
-              </span>
+              <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
+              <span className="text-sm font-medium">Connected</span>
             </div>
             
             {/* Phase Status - BIG AND VISIBLE */}
-            {state && (
-              <div className="flex items-center gap-3 px-5 py-2 bg-gradient-to-r from-pink-100 to-purple-100 dark:from-pink-900/30 dark:to-purple-900/30 rounded-full border-2 border-pink-400 dark:border-pink-600">
-                <div className={`w-4 h-4 rounded-full ${getPhaseColor()} shadow-lg ${state.phase === 'listening' ? '' : 'animate-pulse'}`} />
-                <span className="text-base font-bold capitalize text-pink-900 dark:text-pink-200">{state.phase}</span>
-              </div>
-            )}
+            <div className="flex items-center gap-3 px-5 py-2 bg-gradient-to-r from-pink-100 to-purple-100 dark:from-pink-900/30 dark:to-purple-900/30 rounded-full border-2 border-pink-400 dark:border-pink-600">
+              <div className={`w-4 h-4 rounded-full ${getPhaseColor()} shadow-lg ${emotionState.phase === 'listening' ? '' : 'animate-pulse'}`} />
+              <span className="text-base font-bold capitalize text-pink-900 dark:text-pink-200">{emotionState.phase}</span>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Dynamic Emotional State Monitor */}
-      {state && (
-        <div className={`${emotionStyle.bg} ${emotionStyle.borderColor} border-2 rounded-2xl ${emotionStyle.glow} p-6 mb-6 transition-all duration-700 ease-in-out`}>
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold flex items-center gap-2">
-              <span>💭 Emotional State</span>
-            </h2>
-            <div className="flex items-center gap-3 px-4 py-2 bg-white/50 dark:bg-black/30 backdrop-blur-sm rounded-full border border-white/30">
-              <div className={`w-4 h-4 rounded-full ${getPhaseColor()} shadow-lg`} />
-              <span className="text-sm font-bold capitalize">{state.phase}</span>
-            </div>
+      <div className={`${emotionStyle.bg} ${emotionStyle.borderColor} border-2 rounded-2xl ${emotionStyle.glow} p-6 mb-6 transition-all duration-700 ease-in-out`}>
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl font-bold flex items-center gap-2">
+            <span>💭 Emotional State</span>
+          </h2>
+          <div className="flex items-center gap-3 px-4 py-2 bg-white/50 dark:bg-black/30 backdrop-blur-sm rounded-full border border-white/30">
+            <div className={`w-4 h-4 rounded-full ${getPhaseColor()} shadow-lg`} />
+            <span className="text-sm font-bold capitalize">{emotionState.phase}</span>
           </div>
-          
-          {/* Emotion Display - Big and Animated */}
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Current Emotion</span>
-            </div>
-            <div className={`flex items-center gap-4 p-4 bg-white/60 dark:bg-black/40 backdrop-blur-sm rounded-xl border-2 ${emotionStyle.borderColor} ${emotionStyle.glow} transition-all duration-500`}>
-              <div className={`text-6xl ${emotionStyle.pulse}`}>
-                {emotionStyle.emoji}
-              </div>
-              <div className="flex-1">
-                <div className={`text-3xl font-black capitalize ${emotionStyle.text} transition-all duration-500`}>
-                  {state.emotion}
-                </div>
-                <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                  {emotionStyle.subtitle}
-                </div>
-              </div>
-            </div>
+        </div>
+        
+        {/* Emotion Display - Big and Animated */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Current Emotion</span>
           </div>
-
-          {/* Energy Level - Animated Bar */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Energy Level</span>
-              <span className={`text-2xl font-black ${emotionStyle.text} transition-all duration-500`}>
-                {Math.round(state.energy * 100)}%
-              </span>
+          <div className={`flex items-center gap-4 p-4 bg-white/60 dark:bg-black/40 backdrop-blur-sm rounded-xl border-2 ${emotionStyle.borderColor} ${emotionStyle.glow} transition-all duration-500`}>
+            <div className={`text-6xl ${emotionStyle.pulse}`}>
+              {emotionStyle.emoji}
             </div>
-            <div className="relative">
-              {/* Background bar */}
-              <div className="w-full bg-white/60 dark:bg-black/40 rounded-full h-6 overflow-hidden border-2 border-white/30">
-                {/* Animated energy bar with glow */}
-                <div
-                  className={`bg-gradient-to-r ${emotionStyle.gradient} h-full transition-all duration-1000 ease-out relative`}
-                  style={{ width: `${state.energy * 100}%` }}
-                >
-                  {/* Shimmer effect */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
-                  {/* Pulse glow */}
-                  <div className={`absolute inset-0 ${emotionStyle.glow} animate-pulse`} />
-                </div>
+            <div className="flex-1">
+              <div className={`text-3xl font-black capitalize ${emotionStyle.text} transition-all duration-500`}>
+                {emotionState.emotion}
               </div>
-              {/* Energy level indicators */}
-              <div className="flex justify-between mt-1 px-1">
-                <span className="text-xs text-gray-500">Low</span>
-                <span className="text-xs text-gray-500">Medium</span>
-                <span className="text-xs text-gray-500">High</span>
+              <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                {emotionStyle.subtitle}
               </div>
             </div>
           </div>
         </div>
-      )}
+
+        {/* Energy Level - Animated Bar */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Energy Level</span>
+            <span className={`text-2xl font-black ${emotionStyle.text} transition-all duration-500`}>
+              {Math.round(emotionState.energy * 100)}%
+            </span>
+          </div>
+          <div className="relative">
+            {/* Background bar */}
+            <div className="w-full bg-white/60 dark:bg-black/40 rounded-full h-6 overflow-hidden border-2 border-white/30">
+              {/* Animated energy bar with glow */}
+              <div
+                className={`bg-gradient-to-r ${emotionStyle.gradient} h-full transition-all duration-1000 ease-out relative`}
+                style={{ width: `${emotionState.energy * 100}%` }}
+              >
+                {/* Shimmer effect */}
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
+                {/* Pulse glow */}
+                <div className={`absolute inset-0 ${emotionStyle.glow} animate-pulse`} />
+              </div>
+            </div>
+            {/* Energy level indicators */}
+            <div className="flex justify-between mt-1 px-1">
+              <span className="text-xs text-gray-500">Low</span>
+              <span className="text-xs text-gray-500">Medium</span>
+              <span className="text-xs text-gray-500">High</span>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Talk Interface */}
       <div className="bg-gradient-to-br from-pink-50 to-purple-50 dark:from-pink-900/20 dark:to-purple-900/20 rounded-lg shadow-md p-8 mb-6 border-2 border-pink-200 dark:border-pink-700">
@@ -839,17 +570,17 @@ export default function Home() {
           </button>
           
           {/* Mute Button - Shows when Candy is speaking */}
-          {(state?.phase === 'speaking' || reply) && !isRecording && (
-          <button
-              onClick={handleShutUp}
-              title="Stop her from talking (you can resume when ready)"
+          {emotionState.phase === 'speaking' && currentAudioRef.current && !isRecording && (
+            <button
+              onClick={handleStopAudio}
+              title="Stop her from talking"
               className="group relative px-8 py-4 bg-gradient-to-r from-red-500 via-pink-500 to-purple-500 hover:from-red-600 hover:via-pink-600 hover:to-purple-600 text-white font-bold text-lg rounded-full shadow-xl transform transition-all hover:scale-105 active:scale-95 border-2 border-white/30"
-          >
+            >
               <span className="flex items-center gap-3">
                 <span className="text-3xl animate-pulse">🤫</span>
                 <span>Shut up!</span>
               </span>
-          </button>
+            </button>
           )}
         </div>
 
@@ -858,11 +589,11 @@ export default function Home() {
             <span className="flex items-center justify-center gap-2">
               🔴 Recording... {recordingDuration.toFixed(1)}s (Release to send)
             </span>
-          ) : isProcessing || state?.phase === 'thinking' ? (
+          ) : isProcessing || emotionState.phase === 'thinking' ? (
             <span className="flex items-center justify-center gap-2">
               <span className="animate-spin">🧠</span> Thinking...
             </span>
-          ) : state?.phase === 'speaking' ? (
+          ) : emotionState.phase === 'speaking' ? (
             <span className="flex items-center justify-center gap-2">
               <span className="animate-pulse">🗣️</span> Speaking...
             </span>
@@ -895,6 +626,33 @@ export default function Home() {
         )}
       </div>
 
+      {/* Performance Metrics */}
+      {metrics && (
+        <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4 mb-6 border border-gray-300 dark:border-gray-700">
+          <h3 className="text-sm font-bold mb-2">⚡ Performance Metrics</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+            <div>
+              <div className="text-gray-500">STT</div>
+              <div className="font-bold">{metrics.stt}ms</div>
+            </div>
+            <div>
+              <div className="text-gray-500">GPT</div>
+              <div className="font-bold">{metrics.gpt}ms</div>
+            </div>
+            <div>
+              <div className="text-gray-500">TTS</div>
+              <div className="font-bold">{metrics.tts}ms</div>
+            </div>
+            <div>
+              <div className="text-gray-500">Total</div>
+              <div className={`font-bold ${metrics.total < 3000 ? 'text-green-600' : 'text-red-600'}`}>
+                {metrics.total}ms {metrics.total < 3000 ? '✅' : '❌'}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Error Display */}
       {error && (
         <div className="bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 p-4 rounded-lg mb-6">
@@ -902,10 +660,12 @@ export default function Home() {
         </div>
       )}
 
-      {/* Optional: Session ID Display (for debugging) */}
+      {/* Mode Badge */}
       <div className="text-center text-xs text-gray-500">
-        Session: {sessionId}
-        </div>
+        <span className="px-3 py-1 bg-purple-100 dark:bg-purple-900/30 rounded-full border border-purple-300 dark:border-purple-700">
+          🔥 Full Mode Active - Firebase + Emotions + AI
+        </span>
+      </div>
     </main>
   );
 }

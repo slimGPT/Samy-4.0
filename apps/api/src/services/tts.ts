@@ -9,9 +9,9 @@ import path from 'path';
 
 const ELEVENLABS_API_URL = 'https://api.elevenlabs.io/v1';
 
-// Default voice ID for Samy (you can change this to any ElevenLabs voice)
-// This is "Adam" voice - a warm, friendly voice
-const DEFAULT_VOICE_ID = 'pNInz6obpgDQGcFmaJgB';
+// Default voice ID for Candy (you can change this to any ElevenLabs voice)
+// This is "Arabella" voice - a warm, romantic female voice perfect for Candy
+const DEFAULT_VOICE_ID = 'aEO01A4wXwd1O8GPgGlF';
 
 export interface TTSOptions {
   voiceId?: string;
@@ -42,9 +42,16 @@ export async function generateSpeech(
     }
 
     const voiceId = options.voiceId || DEFAULT_VOICE_ID;
-    const stability = options.stability ?? 0.5;
-    const similarityBoost = options.similarityBoost ?? 0.75;
-    const modelId = options.modelId || 'eleven_monolingual_v1';
+    const stability = options.stability ?? 0.71; // Higher for more consistent voice
+    const similarityBoost = options.similarityBoost ?? 0.85; // Higher for more expressive
+    const modelId = options.modelId || 'eleven_multilingual_v2';
+
+    console.log(`🔊 Generating speech with ElevenLabs...`);
+    console.log(`   Voice ID: ${voiceId} (Arabella)`);
+    console.log(`   Model: ${modelId}`);
+    console.log(`   Stability: ${stability}`);
+    console.log(`   Similarity Boost: ${similarityBoost}`);
+    console.log(`   Text: "${text.substring(0, 50)}..."`);
 
     // Call ElevenLabs API
     const response = await axios.post(
@@ -63,12 +70,15 @@ export async function generateSpeech(
           'Content-Type': 'application/json',
         },
         responseType: 'arraybuffer',
+        timeout: 30000, // 30 second timeout
       }
     );
 
+    console.log(`✅ ElevenLabs response received (${response.data.byteLength} bytes)`);
+
     // Save audio file
     const timestamp = Date.now();
-    const fileName = `samy-speech-${timestamp}.mp3`;
+    const fileName = `candy-speech-${timestamp}.mp3`;
     const audioDir = path.join(process.cwd(), 'temp', 'audio');
     
     // Create temp directory if it doesn't exist

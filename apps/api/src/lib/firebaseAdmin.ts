@@ -61,9 +61,24 @@ function validateAdminConfig() {
     throw new Error('❌ FIREBASE_PRIVATE_KEY is missing');
   }
   
+  // Validate private key format (should be much longer than 100 chars)
+  if (serviceAccount.privateKey.length < 100) {
+    throw new Error('❌ FIREBASE_PRIVATE_KEY appears invalid (too short)');
+  }
+  
+  // Check for valid PEM format
+  if (!serviceAccount.privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
+    throw new Error('❌ FIREBASE_PRIVATE_KEY missing BEGIN marker');
+  }
+  
+  if (!serviceAccount.privateKey.includes('-----END PRIVATE KEY-----')) {
+    throw new Error('❌ FIREBASE_PRIVATE_KEY missing END marker');
+  }
+  
   console.log('✅ Firebase Admin Config validated:', {
     projectId: serviceAccount.projectId,
     clientEmail: serviceAccount.clientEmail.substring(0, 20) + '...',
+    keyLength: serviceAccount.privateKey.length,
   });
 }
 
@@ -85,8 +100,15 @@ try {
   firebaseInitialized = true;
 } catch (error: any) {
   console.error('❌ Firebase Admin initialization error:', error.message);
-  console.warn('⚠️ Server will start WITHOUT Firebase - some features may not work');
-  console.warn('⚠️ To fix: Add Firebase credentials to .env file');
+  console.warn('\n⚠️ Server will start WITHOUT Firebase - some features may not work');
+  console.warn('⚠️ To fix Firebase:');
+  console.warn('   1. Go to Firebase Console: https://console.firebase.google.com/');
+  console.warn(`   2. Select project: ${serviceAccount.projectId || 'your-project'}`);
+  console.warn('   3. Go to: Project Settings → Service Accounts');
+  console.warn('   4. Click "Generate New Private Key"');
+  console.warn('   5. Copy the ENTIRE private key to .env as FIREBASE_PRIVATE_KEY');
+  console.warn('   6. Make sure to escape newlines as \\n\n');
+  console.warn('🎯 For now: Core AI pipeline works without Firebase!\n');
   // Don't throw - allow server to start anyway
 }
 

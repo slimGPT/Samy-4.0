@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Test script for Samy API
+# Test script for Candy API
 # Usage: ./scripts/test-api.sh
 
 API_URL=${API_URL:-http://localhost:3001}
 
-echo "🧪 Testing Samy API at $API_URL"
+echo "🧪 Testing Candy API at $API_URL"
 echo ""
 
 # Test 1: Health check

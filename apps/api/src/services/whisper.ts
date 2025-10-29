@@ -8,9 +8,16 @@ import fs from 'fs';
 import path from 'path';
 import ffmpeg from 'fluent-ffmpeg';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Lazy-load OpenAI client to ensure env vars are loaded first
+let openai: OpenAI | null = null;
+function getOpenAIClient(): OpenAI {
+  if (!openai) {
+    openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  }
+  return openai;
+}
 
 export interface TranscriptionResult {
   text: string;
@@ -33,7 +40,7 @@ export async function transcribeAudio(audioFilePath: string): Promise<Transcript
     const audioFile = fs.createReadStream(audioFilePath);
 
     // Call Whisper API
-    const transcription = await openai.audio.transcriptions.create({
+    const transcription = await getOpenAIClient().audio.transcriptions.create({
       file: audioFile,
       model: 'whisper-1',
       language: 'en', // Can be changed to auto-detect or specific language
@@ -109,11 +116,13 @@ export async function transcribeAudioSimple(audioFilePath: string): Promise<stri
     const attemptTranscription = async (model: string, retryCount: number = 0): Promise<any> => {
       try {
         const audioStream = fs.createReadStream(fileToTranscribe);
-        return await openai.audio.transcriptions.create({
+        return await getOpenAIClient().audio.transcriptions.create({
           file: audioStream,
           model: model,
           response_format: 'text',
           language: 'en',
+        }, {
+          timeout: 60000, // 60 second timeout for large audio files
         });
       } catch (error: any) {
         const isConnectionError = error.code === 'ECONNRESET' || 
@@ -121,8 +130,9 @@ export async function transcribeAudioSimple(audioFilePath: string): Promise<stri
                                   error.message?.includes('ECONNRESET');
         
         if (isConnectionError && retryCount < MAX_RETRIES) {
-          console.log(`⚠️ Connection error, retrying (${retryCount + 1}/${MAX_RETRIES})...`);
-          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * (retryCount + 1)));
+          const backoffDelay = RETRY_DELAY * Math.pow(2, retryCount); // Exponential backoff
+          console.log(`⚠️ Connection error, retrying (${retryCount + 1}/${MAX_RETRIES}) after ${backoffDelay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, backoffDelay));
           return attemptTranscription(model, retryCount + 1);
         }
         

@@ -55,7 +55,7 @@ async function testSpeak() {
   console.log('2️⃣  Testing /api/speak...');
   
   const testTexts = [
-    'Hello! I am Samy the bear.',
+    'Hello! I am Candy, your AI girlfriend.',
     'This is a test of the text-to-speech system.',
   ];
 
@@ -138,7 +138,7 @@ async function runTests() {
     console.log('✅ All tests passed! Module 2 is working correctly.\n');
     console.log('🎉 Next steps:');
     console.log('   1. Test with the web interface at http://localhost:3000');
-    console.log('   2. Try the "Talk to Samy" feature');
+    console.log('   2. Try the "Talk to Candy" feature');
     console.log('   3. Check Firestore for state updates\n');
     process.exit(0);
   } else {

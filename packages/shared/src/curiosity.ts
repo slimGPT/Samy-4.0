@@ -3,11 +3,7 @@
  * Measures engagement based on session metrics
  */
 
-export interface SessionMetrics {
-  turns: number;
-  whQuestions: number;
-  sessionMinutes: number;
-}
+import type { SessionMetrics } from './types';
 
 export function calculateCuriosityIndex(metrics: SessionMetrics): number {
   const { turns, whQuestions, sessionMinutes } = metrics;
