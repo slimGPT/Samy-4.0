@@ -87,9 +87,9 @@ export default function Home() {
         const recordingDuration = (Date.now() - startTime) / 1000;
         console.log(`⏹️ Recording duration: ${recordingDuration.toFixed(2)}s`);
 
-        if (recordingDuration < 0.5) {
+        if (recordingDuration < 1.0) {
           stream.getTracks().forEach(track => track.stop());
-          setError('Please record for at least 1 second');
+          setError('Please record for at least 2 seconds - speak clearly into your mic');
           return;
         }
 
@@ -98,8 +98,8 @@ export default function Home() {
         
         console.log(`📦 Audio blob size: ${audioBlob.size} bytes`);
         
-        if (audioBlob.size < 1000) {
-          setError('Recording too short or no audio captured. Please try again.');
+        if (audioBlob.size < 2000) {
+          setError('Recording too short or no audio captured. Speak for at least 2 seconds.');
           return;
         }
 
@@ -143,7 +143,7 @@ export default function Home() {
       const listenStartTime = Date.now();
       
       const formData = new FormData();
-      formData.append('audio', audioBlob, `recording.${extension}`);
+      formData.append('file', audioBlob, `recording.${extension}`);
 
       const listenRes = await fetch(`${API_URL}/listen`, {
         method: 'POST',
@@ -153,7 +153,14 @@ export default function Home() {
       if (!listenRes.ok) {
         const errorData = await listenRes.json().catch(() => ({ error: 'Unknown error' }));
         console.error('❌ [ELEVENLABS-STT] Failed:', errorData);
-        setError(errorData.error || 'Failed to transcribe audio');
+        
+        // Show user-friendly error messages
+        let userError = errorData.error || 'Failed to transcribe audio';
+        if (errorData.error?.includes('too short') || errorData.error?.includes('corrupt')) {
+          userError = 'Recording too short - speak for at least 2 seconds and try again';
+        }
+        
+        setError(userError);
         setIsProcessing(false);
         setEmotionState(prev => ({ ...prev, phase: 'listening' }));
         return;
@@ -278,30 +285,16 @@ export default function Home() {
     }
   };
 
-  // Push-to-talk handlers
-  const handleMouseDown = () => {
-    if (!isProcessing && !isRecording) {
-      startRecording();
-    }
-  };
-
-  const handleMouseUp = () => {
+  // Push-to-talk toggle handler
+  const handleMicClick = () => {
+    if (isProcessing) return;
+    
     if (isRecording) {
+      // Stop recording and start processing
       stopRecording();
-    }
-  };
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    e.preventDefault();
-    if (!isProcessing && !isRecording) {
+    } else {
+      // Start recording
       startRecording();
-    }
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    e.preventDefault();
-    if (isRecording) {
-      stopRecording();
     }
   };
 
@@ -542,14 +535,10 @@ export default function Home() {
       <div className="bg-gradient-to-br from-pink-50 to-purple-50 dark:from-pink-900/20 dark:to-purple-900/20 rounded-lg shadow-md p-8 mb-6 border-2 border-pink-200 dark:border-pink-700">
         <h2 className="text-2xl font-semibold mb-6 text-center">💕 Talk to Candy</h2>
         
-        {/* Push-to-Talk Mic Button + Shut Up Button */}
+        {/* Push-to-Talk Mic Button (Toggle Mode) + Shut Up Button */}
         <div className="flex justify-center items-center gap-4 mb-6">
           <button
-            onMouseDown={handleMouseDown}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
-            onTouchStart={handleTouchStart}
-            onTouchEnd={handleTouchEnd}
+            onClick={handleMicClick}
             disabled={isProcessing}
             className={`w-32 h-32 rounded-full font-bold text-2xl transition-all transform shadow-lg select-none ${
               isRecording
@@ -558,7 +547,6 @@ export default function Home() {
                 ? 'bg-gray-400 text-white cursor-not-allowed'
                 : 'bg-pink-500 hover:bg-pink-600 text-white hover:scale-105 active:scale-95'
             }`}
-            style={{ touchAction: 'none' }}
           >
             {isRecording ? (
               <>🔴</>
@@ -587,7 +575,12 @@ export default function Home() {
         <p className="text-center text-sm text-gray-600 dark:text-gray-400 mb-6">
           {isRecording ? (
             <span className="flex items-center justify-center gap-2">
-              🔴 Recording... {recordingDuration.toFixed(1)}s (Release to send)
+              <span className={recordingDuration < 2 ? "text-orange-500" : "text-green-500"}>
+                🔴 Recording... {recordingDuration.toFixed(1)}s
+              </span>
+              <span className="text-gray-500">
+                {recordingDuration < 2 ? "(Keep talking... min 2s)" : "(Click to stop & send)"}
+              </span>
             </span>
           ) : isProcessing || emotionState.phase === 'thinking' ? (
             <span className="flex items-center justify-center gap-2">
@@ -598,7 +591,7 @@ export default function Home() {
               <span className="animate-pulse">🗣️</span> Speaking...
             </span>
           ) : (
-            <span>Hold to talk</span>
+            <span>Click to talk (speak for at least 2 seconds)</span>
           )}
         </p>
 

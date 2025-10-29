@@ -251,10 +251,10 @@ app.post('/talk', async (req, res) => {
       console.log(`⏭️ [FIREBASE] Skipped (not initialized)`);
     }
 
-    // Step 3: Get GPT response (stable)
-    console.log(`⏱️ [GPT] Calling GPT-4o...`);
+    // Step 3: Get GPT response with emotional context
+    console.log(`⏱️ [GPT] Calling GPT-4o with ${detectedEmotion} emotional context...`);
     const gptStartTime = Date.now();
-    const reply = await chatMinimal(text);
+    const reply = await chatMinimal(text, detectedEmotion);
     const gptDuration = Date.now() - gptStartTime;
     
     console.log(`✅ [GPT] Response: "${reply}"`);
