@@ -1,12 +1,12 @@
-# 🤖 Candy AI - Avatar Integration Guide
+# 🤖 SamyBear 4.0 - Avatar Integration Guide
 
-**How to connect 3D avatars to Candy AI, regardless of engine (Unity, Unreal, Three.js, etc.)**
+**How to connect 3D avatars to SamyBear 4.0, regardless of engine (Unity, Unreal, Three.js, etc.)**
 
 ---
 
 ## 🎯 Overview
 
-Candy AI is **avatar-ready** and designed to work with any 3D engine or framework. This guide covers:
+SamyBear 4.0 is **avatar-ready** and designed to work with any 3D engine or framework. This guide covers:
 1. Real-time emotion and state synchronization
 2. Lip-sync data streaming
 3. Audio playback coordination
@@ -17,7 +17,7 @@ Candy AI is **avatar-ready** and designed to work with any 3D engine or framewor
 ## 📡 Integration Architecture
 
 ```
-Candy AI API
+SamyBear 4.0 API
     ↓
 WebSocket Server (or REST polling)
     ↓
@@ -30,7 +30,7 @@ Avatar Client (Unity/Unreal/Three.js/etc.)
 ```
 User Speaks
     ↓
-Candy AI processes (STT → GPT → TTS)
+SamyBear processes (ElevenLabs STT → GPT-4o → ElevenLabs TTS)
     ↓
 API sends emotion + audio URL
     ↓
@@ -50,7 +50,7 @@ Avatar animates emotion + plays audio + lip-sync
 // Poll every 500ms for state updates
 setInterval(async () => {
   const response = await fetch('http://localhost:3001/state');
-  const { emotion, energy, phase, audioUrl } = await response.json();
+  const { emotion, energy, phase, audioUrl, lang } = await response.json();
   
   // Update avatar
   avatar.setEmotion(emotion);
@@ -90,11 +90,12 @@ function broadcastToAvatars(data: any) {
 // In /talk endpoint, after emotion update:
 broadcastToAvatars({
   type: 'emotion_update',
-  emotion: detectedEmotion,
-  energy: emotionEnergy,
-  phase: 'speaking',
+  emotion: detectedEmotion, // curious, happy, calm, sleepy, confused, excited, empathetic, sad
+  energy: emotionEnergy, // 0-1
+  phase: 'speaking', // idle, listening, thinking, speaking
   audioUrl: result.audioUrl,
   text: reply,
+  lang: 'en', // en, fr, ar
   timestamp: Date.now(),
 });
 ```
@@ -161,11 +162,12 @@ eventSource.onmessage = (event) => {
 ```typescript
 interface EmotionUpdate {
   type: 'emotion_update';
-  emotion: string;          // 'flirty', 'playful', 'caring', etc.
+  emotion: string;          // 'curious', 'happy', 'calm', 'sleepy', 'confused', 'excited', 'empathetic', 'sad'
   energy: number;           // 0.0 - 1.0
-  phase: 'speaking' | 'listening' | 'thinking';
+  phase: 'idle' | 'listening' | 'thinking' | 'speaking';
   audioUrl: string;         // URL to audio file
   text: string;             // Text being spoken
+  lang: string;             // 'en', 'fr', 'ar'
   timestamp: number;        // Unix timestamp
 }
 ```
@@ -174,7 +176,7 @@ interface EmotionUpdate {
 ```typescript
 interface PhaseChange {
   type: 'phase_change';
-  phase: 'listening' | 'thinking' | 'speaking';
+  phase: 'idle' | 'listening' | 'thinking' | 'speaking';
   timestamp: number;
 }
 ```
@@ -206,7 +208,7 @@ using UnityEngine;
 using WebSocketSharp;
 using System;
 
-public class CandyAvatarController : MonoBehaviour
+public class SamyBearAvatarController : MonoBehaviour
 {
     private WebSocket ws;
     private Animator animator;
@@ -220,7 +222,7 @@ public class CandyAvatarController : MonoBehaviour
         animator = GetComponent<Animator>();
         audioSource = GetComponent<AudioSource>();
         
-        // Connect to Candy AI WebSocket
+        // Connect to SamyBear 4.0 WebSocket
         ws = new WebSocket("ws://localhost:3002");
         
         ws.OnMessage += (sender, e) =>
@@ -243,8 +245,17 @@ public class CandyAvatarController : MonoBehaviour
         // Set phase
         switch (data.phase)
         {
+            case "idle":
+                animator.SetBool("IsListening", false);
+                animator.SetBool("IsSpeaking", false);
+                break;
             case "listening":
                 animator.SetBool("IsListening", true);
+                animator.SetBool("IsSpeaking", false);
+                break;
+            case "thinking":
+                animator.SetTrigger("Think");
+                animator.SetBool("IsListening", false);
                 animator.SetBool("IsSpeaking", false);
                 break;
             case "speaking":
@@ -252,9 +263,6 @@ public class CandyAvatarController : MonoBehaviour
                 animator.SetBool("IsSpeaking", true);
                 StartCoroutine(PlayAudio(data.audioUrl));
                 StartCoroutine(AnimateLipSync(data.text));
-                break;
-            case "thinking":
-                animator.SetTrigger("Think");
                 break;
         }
         
@@ -270,24 +278,40 @@ public class CandyAvatarController : MonoBehaviour
             faceRenderer.SetBlendShapeWeight(i, 0);
         }
         
-        // Apply emotion-specific blend shapes
+        // Apply emotion-specific blend shapes (child-appropriate)
         switch (emotion)
         {
-            case "flirty":
-                faceRenderer.SetBlendShapeWeight(GetBlendShapeIndex("Smile"), 80 * energy);
-                faceRenderer.SetBlendShapeWeight(GetBlendShapeIndex("EyeWink"), 50 * energy);
+            case "curious":
+                faceRenderer.SetBlendShapeWeight(GetBlendShapeIndex("HeadTilt"), 60 * energy);
+                faceRenderer.SetBlendShapeWeight(GetBlendShapeIndex("EyeWide"), 50 * energy);
                 break;
-            case "playful":
+            case "happy":
                 faceRenderer.SetBlendShapeWeight(GetBlendShapeIndex("Smile"), 100 * energy);
-                faceRenderer.SetBlendShapeWeight(GetBlendShapeIndex("EyeWide"), 60 * energy);
+                faceRenderer.SetBlendShapeWeight(GetBlendShapeIndex("EyeWide"), 70 * energy);
                 break;
-            case "caring":
+            case "calm":
                 faceRenderer.SetBlendShapeWeight(GetBlendShapeIndex("Smile"), 60 * energy);
                 faceRenderer.SetBlendShapeWeight(GetBlendShapeIndex("EyeSoft"), 70 * energy);
                 break;
+            case "sleepy":
+                faceRenderer.SetBlendShapeWeight(GetBlendShapeIndex("EyeClose"), 80 * energy);
+                faceRenderer.SetBlendShapeWeight(GetBlendShapeIndex("Yawn"), 50 * energy);
+                break;
+            case "confused":
+                faceRenderer.SetBlendShapeWeight(GetBlendShapeIndex("HeadTilt"), 70 * energy);
+                faceRenderer.SetBlendShapeWeight(GetBlendShapeIndex("BrowFurrow"), 60 * energy);
+                break;
+            case "excited":
+                faceRenderer.SetBlendShapeWeight(GetBlendShapeIndex("Smile"), 100 * energy);
+                faceRenderer.SetBlendShapeWeight(GetBlendShapeIndex("EyeWide"), 90 * energy);
+                break;
+            case "empathetic":
+                faceRenderer.SetBlendShapeWeight(GetBlendShapeIndex("Smile"), 70 * energy);
+                faceRenderer.SetBlendShapeWeight(GetBlendShapeIndex("EyeSoft"), 80 * energy);
+                break;
             case "sad":
-                faceRenderer.SetBlendShapeWeight(GetBlendShapeIndex("Frown"), 80 * energy);
-                faceRenderer.SetBlendShapeWeight(GetBlendShapeIndex("EyeDowncast"), 90 * energy);
+                faceRenderer.SetBlendShapeWeight(GetBlendShapeIndex("Frown"), 70 * energy);
+                faceRenderer.SetBlendShapeWeight(GetBlendShapeIndex("EyeDowncast"), 80 * energy);
                 break;
             // Add more emotions...
         }
@@ -387,9 +411,14 @@ Speaking Layer: Lip-sync and mouth movements
 **Animation Controller Setup**:
 ```
 Parameters:
-- Emotion_flirty (Trigger)
-- Emotion_playful (Trigger)
-- Emotion_caring (Trigger)
+- Emotion_curious (Trigger)
+- Emotion_happy (Trigger)
+- Emotion_calm (Trigger)
+- Emotion_sleepy (Trigger)
+- Emotion_confused (Trigger)
+- Emotion_excited (Trigger)
+- Emotion_empathetic (Trigger)
+- Emotion_sad (Trigger)
 - IsListening (Bool)
 - IsSpeaking (Bool)
 - Energy (Float 0-1)
@@ -404,7 +433,7 @@ Transitions:
 ## 🎬 Unreal Engine Integration
 
 ### Blueprint Setup
-1. Create `BP_CandyAvatar` Blueprint
+1. Create `BP_SamyBearAvatar` Blueprint
 2. Add `WebSocket` component (plugin: `WebSocketNetworking`)
 3. Add `Audio` component
 4. Add `SkeletalMesh` with morph targets
@@ -430,21 +459,26 @@ Start Lip Sync Animation
 ### Animation Blueprint
 ```cpp
 // C++ or Blueprint
-void UCandyAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
+void USamyBearAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 {
     Super::NativeUpdateAnimation(DeltaSeconds);
     
     // Get emotion from character
-    ACandyCharacter* Candy = Cast<ACandyCharacter>(TryGetPawnOwner());
-    if (Candy)
+    ASamyBearCharacter* SamyBear = Cast<ASamyBearCharacter>(TryGetPawnOwner());
+    if (SamyBear)
     {
-        CurrentEmotion = Candy->CurrentEmotion;
-        EnergyLevel = Candy->EnergyLevel;
+        CurrentEmotion = SamyBear->CurrentEmotion;
+        EnergyLevel = SamyBear->EnergyLevel;
         
         // Blend emotion poses
-        FlirtyAlpha = (CurrentEmotion == "flirty") ? EnergyLevel : 0.0f;
-        PlayfulAlpha = (CurrentEmotion == "playful") ? EnergyLevel : 0.0f;
-        CaringAlpha = (CurrentEmotion == "caring") ? EnergyLevel : 0.0f;
+        CuriousAlpha = (CurrentEmotion == "curious") ? EnergyLevel : 0.0f;
+        HappyAlpha = (CurrentEmotion == "happy") ? EnergyLevel : 0.0f;
+        CalmAlpha = (CurrentEmotion == "calm") ? EnergyLevel : 0.0f;
+        SleepyAlpha = (CurrentEmotion == "sleepy") ? EnergyLevel : 0.0f;
+        ConfusedAlpha = (CurrentEmotion == "confused") ? EnergyLevel : 0.0f;
+        ExcitedAlpha = (CurrentEmotion == "excited") ? EnergyLevel : 0.0f;
+        EmpatheticAlpha = (CurrentEmotion == "empathetic") ? EnergyLevel : 0.0f;
+        SadAlpha = (CurrentEmotion == "sad") ? EnergyLevel : 0.0f;
         // ... etc
         
         // Apply morph targets
@@ -469,9 +503,9 @@ import { useEffect, useRef } from 'react';
 import { useGLTF, useAnimations } from '@react-three/drei';
 import * as THREE from 'three';
 
-function CandyAvatar() {
+function SamyBearAvatar() {
   const avatarRef = useRef<THREE.Group>();
-  const { scene, animations } = useGLTF('/models/candy-avatar.glb');
+  const { scene, animations } = useGLTF('/models/samybear-avatar.glb');
   const { actions } = useAnimations(animations, avatarRef);
   const audioRef = useRef<HTMLAudioElement>(new Audio());
   
@@ -622,15 +656,14 @@ function applyPhoneme(mesh: THREE.SkinnedMesh, phoneme: string, intensity: numbe
 ### Visual Emotion Indicators
 | Emotion | Facial Expression | Body Language | Color Scheme |
 |---------|------------------|---------------|--------------|
-| **Flirty** 💋 | Smirk, wink, soft eyes | Leaning in, playful gestures | Pink-red |
-| **Playful** 🎉 | Wide smile, raised brows | Bouncy, energetic | Yellow-orange |
-| **Caring** 💞 | Gentle smile, soft gaze | Open arms, calm | Purple-pink |
-| **Curious** 🤔 | Head tilt, attentive eyes | Leaning forward | Indigo-purple |
-| **Excited** 🤩 | Big smile, bright eyes | Animated, high energy | Orange-red |
-| **Calm** 🌸 | Soft smile, relaxed | Still, centered | Blue-cyan |
-| **Sad** 💙 | Downturned mouth, low eyes | Slouched, slow | Slate-blue |
-| **Angry** 💢 | Furrowed brows, frown | Tense, sharp gestures | Deep red |
-| **Bitchy** 😤 | Eye roll, smirk | Hand on hip, dismissive | Red-orange |
+| **Curious** 🐻 | Head tilt, attentive eyes | Leaning forward, exploring | Sky blue, indigo |
+| **Happy** 🎉 | Wide smile, bright eyes | Bouncy, energetic | Yellow, amber |
+| **Calm** 🌸 | Soft smile, relaxed | Still, centered | Blue, cyan |
+| **Sleepy** 😴 | Gentle eyes, yawn | Slow, gentle movements | Soft purple |
+| **Confused** 🤔 | Head tilt, questioning look | Slight uncertainty | Indigo, purple |
+| **Excited** 🤩 | Big smile, wide eyes | Animated, high energy | Orange, yellow |
+| **Empathetic** 💙 | Gentle smile, caring eyes | Open, supportive | Purple, blue |
+| **Sad** 💙 | Downturned mouth, soft eyes | Gentle, comforting | Blue, indigo |
 
 ### Animation Timing
 - **Emotion transition**: 700ms fade
@@ -718,5 +751,5 @@ setTimeout(() => {
 
 ---
 
-**Your avatar integration is ready! Choose your engine and start bringing Candy to life in 3D. 🎨🤖**
+**Your avatar integration is ready! Choose your engine and start bringing SamyBear to life in 3D. 🎨🤖**
 

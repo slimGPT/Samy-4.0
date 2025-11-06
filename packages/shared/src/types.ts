@@ -1,5 +1,5 @@
 export type Phase = "idle" | "listening" | "thinking" | "speaking";
-export type Emotion = "happy" | "calm" | "curious" | "sleepy";
+export type Emotion = "curious" | "happy" | "calm" | "sleepy" | "confused" | "excited" | "empathetic" | "sad";
 export type Language = "ar" | "fr" | "en";
 
 export interface SessionState {

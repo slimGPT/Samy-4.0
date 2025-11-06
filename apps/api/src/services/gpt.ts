@@ -183,7 +183,7 @@ export async function chat(
 
     // Call GPT API with higher temperature for variety
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4o',
       messages: messages,
       max_tokens: 200, // More room for natural responses
       temperature: 1.1, // HIGH temperature for maximum personality variation

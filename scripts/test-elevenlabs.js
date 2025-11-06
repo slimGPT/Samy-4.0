@@ -22,18 +22,18 @@ async function testElevenLabs() {
   try {
     const axios = require('../apps/api/node_modules/axios').default;
 
-    const voiceId = 'aEO01A4wXwd1O8GPgGlF'; // Arabella
-    const testText = 'Hello! This is a test of the ElevenLabs voice system.';
+    const voiceId = 'UgBBYS2sOqTuMpoF3BR0'; // Samy Bear 4.0
+    const testText = 'Hello! This is SamyBear testing the ElevenLabs voice system.';
 
     console.log('\n📡 Testing ElevenLabs API connection...');
-    console.log(`   Voice: Arabella (${voiceId})`);
+    console.log(`   Voice: Samy Bear 4.0 (${voiceId})`);
     console.log(`   Text: "${testText}"`);
 
     const response = await axios.post(
       `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
       {
         text: testText,
-        model_id: 'eleven_multilingual_v2',
+        model_id: 'eleven_multilingual_v2', // TTS model (STT uses scribe_v1)
         voice_settings: {
           stability: 0.71,
           similarity_boost: 0.85,

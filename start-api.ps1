@@ -2,6 +2,6 @@
 Write-Host "🚀 Starting Candy AI API Server..." -ForegroundColor Cyan
 Write-Host ""
 
-Set-Location "C:\Users\hssli\Desktop\PolstarAI\Candy AI"
+# Use current directory (no need to change location)
 pnpm --filter @apps/api dev
 

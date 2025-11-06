@@ -19,5 +19,18 @@
   "dependencies": {
     "@types/fluent-ffmpeg": "^2.1.28",
     "fluent-ffmpeg": "^2.1.3"
-  }
+  },
+  "description": "**A real-time conversational AI with dynamic emotions, voice interaction, and visual avatar integration.**",
+  "main": "test-all-apis.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/slimGPT/Candy-AI.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/slimGPT/Candy-AI/issues"
+  },
+  "homepage": "https://github.com/slimGPT/Candy-AI#readme"
 }

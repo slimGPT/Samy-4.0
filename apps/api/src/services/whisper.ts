@@ -7,6 +7,7 @@ import OpenAI from 'openai';
 import fs from 'fs';
 import path from 'path';
 import ffmpeg from 'fluent-ffmpeg';
+import { Readable } from 'stream';
 
 // Lazy-load OpenAI client to ensure env vars are loaded first
 let openai: OpenAI | null = null;
@@ -79,6 +80,93 @@ async function convertToMp3(inputPath: string): Promise<string> {
       })
       .save(outputPath);
   });
+}
+
+/**
+ * Transcribe audio buffer directly (FASTEST - no file conversion overhead)
+ * Whisper now supports webm directly, so we can skip conversion entirely
+ */
+export async function transcribeAudioBuffer(audioBuffer: Buffer, mimeType: string = 'audio/webm'): Promise<string> {
+  const startTime = Date.now();
+  
+  try {
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY is not configured');
+    }
+    
+    console.log(`🎧 [WHISPER-BUFFER] Transcribing buffer directly (${audioBuffer.length} bytes)...`);
+    
+    // Create a readable stream from buffer (OpenAI SDK accepts Readable streams directly)
+    // Whisper API supports webm format, so no conversion needed!
+    const audioStream = Readable.from(audioBuffer);
+    
+    let tempFilePath: string | null = null;
+    
+    try {
+      // Use Readable stream directly - OpenAI SDK accepts this in Node.js
+      const transcription = await getOpenAIClient().audio.transcriptions.create({
+        file: audioStream,
+        model: 'whisper-1',
+        response_format: 'text',
+        language: 'en',
+      }, {
+        timeout: 30000, // 30 second timeout
+      });
+
+      const duration = Date.now() - startTime;
+      const text = transcription as unknown as string;
+      console.log(`✅ [WHISPER-BUFFER] Transcription complete in ${duration}ms: "${text}"`);
+      return text;
+    } catch (streamError: any) {
+      // If stream approach fails, fallback to temp file (minimal overhead)
+      if (streamError.message?.includes('file') || streamError.message?.includes('format')) {
+        console.log('🔄 [WHISPER-BUFFER] Stream approach failed, using minimal temp file fallback...');
+        
+        // Create minimal temp file (only if stream fails)
+        const tempDir = path.join(process.cwd(), 'temp', 'uploads');
+        if (!fs.existsSync(tempDir)) {
+          fs.mkdirSync(tempDir, { recursive: true });
+        }
+        
+        tempFilePath = path.join(tempDir, `whisper-temp-${Date.now()}.webm`);
+        fs.writeFileSync(tempFilePath, audioBuffer);
+        
+        const audioFile = fs.createReadStream(tempFilePath);
+        const transcription = await getOpenAIClient().audio.transcriptions.create({
+          file: audioFile,
+          model: 'whisper-1',
+          response_format: 'text',
+          language: 'en',
+        }, {
+          timeout: 30000,
+        });
+
+        // Clean up temp file immediately
+        if (tempFilePath && fs.existsSync(tempFilePath)) {
+          fs.unlinkSync(tempFilePath);
+          tempFilePath = null;
+        }
+
+        const duration = Date.now() - startTime;
+        const text = transcription as unknown as string;
+        console.log(`✅ [WHISPER-BUFFER] Transcription complete in ${duration}ms (via temp file): "${text}"`);
+        return text;
+      }
+      
+      // Re-throw if it's not a file/format error
+      throw streamError;
+    }
+  } catch (error: any) {
+    // Clean up temp file on error
+    if (tempFilePath && fs.existsSync(tempFilePath)) {
+      fs.unlinkSync(tempFilePath);
+    }
+    
+    const duration = Date.now() - startTime;
+    console.error('❌ [WHISPER-BUFFER] Transcription error:', error.message);
+    console.error(`   Duration: ${duration}ms`);
+    throw new Error(`Whisper buffer transcription failed: ${error.message}`);
+  }
 }
 
 /**

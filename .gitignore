@@ -8,3 +8,8 @@ build
 *.log
 .DS_Store
 
+# Runtime artifacts
+apps/api/temp/
+apps/web/public/audio/
+*.mp3
+

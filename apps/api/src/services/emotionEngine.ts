@@ -1,5 +1,5 @@
 /**
- * Dynamic Emotion Engine for Candy
+ * Dynamic Emotion Engine for SamyBear 4.0
  * Manages emotion transitions based on conversation flow, time, and context
  */
 
@@ -297,7 +297,7 @@ export async function updateEmotionState(
       { merge: true }
     );
     
-    console.log(`💖 Candy's emotion: ${newEmotionState.current} (intensity: ${newEmotionState.intensity.toFixed(2)}, tone: ${newEmotionState.conversationTone})`);
+    console.log(`💖 SamyBear's emotion: ${newEmotionState.current} (intensity: ${newEmotionState.intensity.toFixed(2)}, tone: ${newEmotionState.conversationTone})`);
   } catch (error) {
     console.error('❌ Error updating emotion state:', error);
   }

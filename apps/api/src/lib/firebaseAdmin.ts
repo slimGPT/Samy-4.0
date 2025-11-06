@@ -3,42 +3,33 @@
  * Used in API routes and server-side operations
  */
 
+import 'dotenv/config';
 import admin from 'firebase-admin';
-import dotenv from 'dotenv';
 import path from 'path';
 
-// Load environment variables from root .env
-// Try multiple paths to find the .env file
-const possibleEnvPaths = [
-  path.resolve(process.cwd(), '.env'),
-  path.resolve(process.cwd(), '../../.env'),
-  path.resolve(__dirname, '../../../../.env'),
-  'C:\\Users\\hssli\\Desktop\\PolstarAI\\Candy AI\\.env'
-];
+// Load environment variables from root .env (monorepo root)
+// The 'dotenv/config' import above automatically loads .env from the root
+// But we also try explicit paths to ensure it works
+// Use process.cwd() for better compatibility with tsx watch
+const rootEnvPath = path.resolve(process.cwd(), '.env');
+const dotenvResult = require('dotenv').config({ path: rootEnvPath });
 
-let envLoaded = false;
-for (const envPath of possibleEnvPaths) {
-  const result = dotenv.config({ path: envPath });
-  if (!result.error && process.env.FIREBASE_PROJECT_ID) {
-    console.log('✅ Loaded .env from:', envPath);
-    envLoaded = true;
-    break;
-  }
+if (dotenvResult.error || !process.env.FIREBASE_PROJECT_ID) {
+  // Fallback: try relative paths
+  require('dotenv').config({ path: path.resolve(process.cwd(), '../../.env') });
+  require('dotenv').config({ path: path.resolve(process.cwd(), 'apps/api/.env') });
 }
 
-if (!envLoaded) {
-  console.warn('⚠️ Could not load .env file. Tried:', possibleEnvPaths);
-  console.warn('📍 Current working directory:', process.cwd());
+if (process.env.FIREBASE_PROJECT_ID) {
+  console.log('✅ Loaded Firebase config from root .env');
 }
 
 // Service account configuration
-// Fix private key formatting - handle both escaped and literal newlines
+// Fix private key formatting - handle escaped newlines (\\n in .env becomes \n)
 let privateKey = process.env.FIREBASE_PRIVATE_KEY || '';
 if (privateKey) {
-  // Replace literal \n with actual newlines
+  // Replace escaped newlines (\\n) with actual newlines
   privateKey = privateKey.replace(/\\n/g, '\n');
-  // Also handle if it's double-escaped
-  privateKey = privateKey.replace(/\\\\n/g, '\n');
   // Remove any quotes that might have been included
   privateKey = privateKey.replace(/^["']|["']$/g, '');
 }

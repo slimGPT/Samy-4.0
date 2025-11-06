@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STT Test - ElevenLabs</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 700px;
+            width: 100%;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .record-btn {
+            width: 100%;
+            padding: 20px;
+            font-size: 18px;
+            font-weight: 600;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .record-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .record-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .record-btn.recording {
+            background: #f44336;
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        .section {
+            margin-bottom: 25px;
+        }
+        
+        .section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+        
+        .transcript {
+            background: #f5f5f5;
+            border-radius: 12px;
+            padding: 20px;
+            min-height: 80px;
+            font-size: 16px;
+            line-height: 1.6;
+            color: #333;
+            word-wrap: break-word;
+        }
+        
+        .transcript.empty {
+            color: #ccc;
+            font-style: italic;
+        }
+        
+        .logs {
+            background: #1e1e1e;
+            border-radius: 12px;
+            padding: 20px;
+            min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: #d4d4d4;
+            line-height: 1.5;
+        }
+        
+        .log-entry {
+            margin-bottom: 8px;
+            padding: 4px 0;
+        }
+        
+        .log-entry.success {
+            color: #4ec9b0;
+        }
+        
+        .log-entry.error {
+            color: #f48771;
+        }
+        
+        .log-entry.info {
+            color: #569cd6;
+        }
+        
+        .log-entry.warn {
+            color: #dcdcaa;
+        }
+        
+        .status {
+            text-align: center;
+            padding: 12px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            display: none;
+        }
+        
+        .status.show {
+            display: block;
+        }
+        
+        .status.info {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+        
+        .status.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        
+        .status.error {
+            background: #ffebee;
+            color: #c62828;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 STT Test</h1>
+        <p class="subtitle">ElevenLabs Speech-to-Text Testing</p>
+        
+        <div id="status" class="status"></div>
+        
+        <button id="recordBtn" class="record-btn">
+            🎤 Record
+        </button>
+        
+        <div class="section">
+            <div class="section-title">🧠 Transcript:</div>
+            <div id="transcript" class="transcript empty">Your transcript will appear here...</div>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">📄 Logs:</div>
+            <div id="logs" class="logs"></div>
+        </div>
+    </div>
+
+    <script>
+        // ========================================
+        // CONFIGURATION
+        // ========================================
+        const ELEVEN_API_KEY = 'sk_103e61196634725ed569088e570a17d0c47ff566eb10bbfa';
+        const ELEVEN_API_URL = 'https://api.elevenlabs.io/v1/speech-to-text';
+        const MODEL_ID = 'scribe_v1_experimental';
+        
+        // ========================================
+        // STATE
+        // ========================================
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let isRecording = false;
+        let audioStream = null;
+        
+        // ========================================
+        // DOM ELEMENTS
+        // ========================================
+        const recordBtn = document.getElementById('recordBtn');
+        const transcript = document.getElementById('transcript');
+        const logs = document.getElementById('logs');
+        const status = document.getElementById('status');
+        
+        // ========================================
+        // LOGGING
+        // ========================================
+        function addLog(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}`;
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            logs.appendChild(logEntry);
+            logs.scrollTop = logs.scrollHeight;
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+        
+        function clearLogs() {
+            logs.innerHTML = '';
+        }
+        
+        function showStatus(message, type = 'info') {
+            status.textContent = message;
+            status.className = `status ${type} show`;
+            setTimeout(() => {
+                status.classList.remove('show');
+            }, 5000);
+        }
+        
+        // ========================================
+        // RECORDING
+        // ========================================
+        async function startRecording() {
+            try {
+                addLog('Requesting microphone access...', 'info');
+                
+                audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                
+                addLog('✅ Microphone access granted', 'success');
+                
+                // Determine best audio format
+                let mimeType = 'audio/webm';
+                const formats = [
+                    'audio/webm;codecs=opus',
+                    'audio/webm',
+                    'audio/mp4',
+                    'audio/ogg;codecs=opus'
+                ];
+                
+                for (const format of formats) {
+                    if (MediaRecorder.isTypeSupported(format)) {
+                        mimeType = format;
+                        break;
+                    }
+                }
+                
+                addLog(`Using audio format: ${mimeType}`, 'info');
+                
+                mediaRecorder = new MediaRecorder(audioStream, { mimeType });
+                audioChunks = [];
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        audioChunks.push(event.data);
+                        addLog(`Audio chunk received: ${event.data.size} bytes`, 'info');
+                    }
+                };
+                
+                mediaRecorder.onstop = async () => {
+                    addLog('Recording stopped', 'info');
+                    
+                    if (audioStream) {
+                        audioStream.getTracks().forEach(track => track.stop());
+                        audioStream = null;
+                    }
+                    
+                    const audioBlob = new Blob(audioChunks, { type: mimeType });
+                    const totalSize = audioBlob.size;
+                    
+                    addLog(`Total audio size: ${totalSize} bytes (${(totalSize / 1024).toFixed(2)} KB)`, 'info');
+                    
+                    if (totalSize < 1000) {
+                        addLog('⚠️ Audio too short. Please record for at least 2 seconds.', 'warn');
+                        showStatus('Recording too short. Please speak for at least 2 seconds.', 'error');
+                        transcript.textContent = 'Your transcript will appear here...';
+                        transcript.className = 'transcript empty';
+                        updateButton(false);
+                        isRecording = false;
+                        recordBtn.disabled = false;
+                        return;
+                    }
+                    
+                    await sendForTranscription(audioBlob, mimeType);
+                };
+                
+                mediaRecorder.start(100); // Collect data every 100ms
+                isRecording = true;
+                updateButton(true);
+                recordBtn.disabled = false; // Re-enable button so user can click to stop
+                addLog('🎤 Recording started...', 'success');
+                addLog('Click button again to stop recording', 'info');
+                showStatus('Recording... Speak now!', 'info');
+                
+            } catch (error) {
+                addLog(`❌ Error accessing microphone: ${error.message}`, 'error');
+                showStatus(`Microphone error: ${error.message}`, 'error');
+                updateButton(false);
+                isRecording = false;
+                recordBtn.disabled = false;
+            }
+        }
+        
+        function stopRecording() {
+            addLog('Stop button clicked', 'info');
+            
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                addLog(`MediaRecorder state: ${mediaRecorder.state}`, 'info');
+                mediaRecorder.stop();
+                updateButton(false);
+                isRecording = false;
+                showStatus('Processing audio...', 'info');
+                addLog('Stopped recording, processing audio...', 'info');
+            } else {
+                addLog(`⚠️ Cannot stop: mediaRecorder=${!!mediaRecorder}, state=${mediaRecorder?.state || 'null'}`, 'warn');
+                // Force cleanup if state is inconsistent
+                if (audioStream) {
+                    audioStream.getTracks().forEach(track => track.stop());
+                    audioStream = null;
+                }
+                updateButton(false);
+                isRecording = false;
+                recordBtn.disabled = false;
+            }
+        }
+        
+        function updateButton(recording) {
+            if (recording) {
+                recordBtn.textContent = '⏹️ Stop Recording';
+                recordBtn.classList.add('recording');
+            } else {
+                recordBtn.textContent = '🎤 Record';
+                recordBtn.classList.remove('recording');
+            }
+        }
+        
+        // ========================================
+        // TRANSCRIPTION
+        // ========================================
+        async function sendForTranscription(audioBlob, mimeType) {
+            try {
+                transcript.textContent = 'Transcribing...';
+                transcript.className = 'transcript';
+                
+                // Prepare FormData
+                const formData = new FormData();
+                const extension = mimeType.includes('webm') ? 'webm' : 
+                                 mimeType.includes('mp4') ? 'mp4' : 
+                                 mimeType.includes('ogg') ? 'ogg' : 'wav';
+                
+                formData.append('file', audioBlob, `recording.${extension}`);
+                formData.append('model_id', MODEL_ID);
+                
+                addLog(`📤 Sending audio to ElevenLabs API...`, 'info');
+                addLog(`   URL: ${ELEVEN_API_URL}`, 'info');
+                addLog(`   Model: ${MODEL_ID}`, 'info');
+                addLog(`   File size: ${audioBlob.size} bytes`, 'info');
+                addLog(`   Format: ${mimeType}`, 'info');
+                
+                const startTime = Date.now();
+                
+                // Send to ElevenLabs API
+                const response = await fetch(ELEVEN_API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'xi-api-key': ELEVEN_API_KEY
+                    },
+                    body: formData
+                });
+                
+                const duration = Date.now() - startTime;
+                addLog(`📥 Response received: ${response.status} ${response.statusText} (${duration}ms)`, 'info');
+                
+                if (!response.ok) {
+                    let errorData;
+                    try {
+                        const text = await response.text();
+                        addLog(`   Response body: ${text}`, 'error');
+                        errorData = JSON.parse(text);
+                    } catch (parseError) {
+                        errorData = { error: `Server error: ${response.status} ${response.statusText}` };
+                    }
+                    
+                    const errorMsg = errorData.detail || errorData.error || errorData.message || `Server error: ${response.status}`;
+                    addLog(`❌ Error: ${errorMsg}`, 'error');
+                    throw new Error(errorMsg);
+                }
+                
+                // Parse response
+                const responseText = await response.text();
+                addLog(`   Response body: ${responseText}`, 'success');
+                
+                let transcription = '';
+                try {
+                    // Try parsing as JSON first
+                    const jsonData = JSON.parse(responseText);
+                    transcription = jsonData.text || jsonData.transcript || jsonData.transcription || '';
+                } catch (parseError) {
+                    // If not JSON, treat as plain text
+                    transcription = responseText.trim();
+                }
+                
+                if (!transcription || transcription.trim() === '') {
+                    addLog('⚠️ Empty transcription received', 'warn');
+                    throw new Error('Empty transcription from API');
+                }
+                
+                // Display transcription
+                transcript.textContent = transcription;
+                transcript.className = 'transcript';
+                addLog(`✅ Transcription successful!`, 'success');
+                addLog(`   Text: "${transcription}"`, 'success');
+                showStatus('✅ Transcription successful!', 'success');
+                
+            } catch (error) {
+                addLog(`❌ Transcription failed: ${error.message}`, 'error');
+                transcript.textContent = `Error: ${error.message}`;
+                transcript.className = 'transcript';
+                showStatus(`❌ ${error.message}`, 'error');
+            } finally {
+                recordBtn.disabled = false;
+            }
+        }
+        
+        // ========================================
+        // EVENT HANDLERS
+        // ========================================
+        recordBtn.addEventListener('click', async () => {
+            addLog(`Button clicked - isRecording: ${isRecording}`, 'info');
+            
+            if (!isRecording) {
+                // Start recording
+                recordBtn.disabled = true;
+                clearLogs();
+                addLog('🚀 Starting recording...', 'info');
+                await startRecording();
+            } else {
+                // Stop recording
+                addLog('🛑 Stop button clicked', 'info');
+                stopRecording();
+                // Don't disable button here - let stopRecording handle it
+            }
+        });
+        
+        // ========================================
+        // INITIALIZATION
+        // ========================================
+        addLog('✨ STT Test UI ready', 'success');
+        addLog(`API URL: ${ELEVEN_API_URL}`, 'info');
+        addLog(`Model: ${MODEL_ID}`, 'info');
+        addLog('Click "Record" button to start', 'info');
+    </script>
+</body>
+</html>
+

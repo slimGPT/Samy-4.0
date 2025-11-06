@@ -308,7 +308,7 @@ app.post('/api/chat', async (req, res) => {
     );
     console.log(`⏱️ [TIMING] Final state updated (+${Date.now() - startTime}ms)`);
 
-    console.log(`✅ Candy's response (${finalEmotion}): "${response.reply}"`);
+    console.log(`✅ SamyBear's response (${finalEmotion}): "${response.reply}"`);
     console.log(`⏱️ [TIMING] Total chat time: ${Date.now() - startTime}ms`);
 
     res.json({
@@ -360,7 +360,7 @@ app.post('/api/speak', async (req, res) => {
       { merge: true }
     );
 
-    // Generate speech with Candy's voice
+    // Generate speech with SamyBear's voice
     const result = await generateSpeech(text, { voiceId });
 
     // Update state with audio URL
@@ -375,7 +375,7 @@ app.post('/api/speak', async (req, res) => {
       { merge: true }
     );
 
-    console.log(`✅ Candy's speech generated: ${result.audioUrl}`);
+    console.log(`✅ SamyBear's speech generated: ${result.audioUrl}`);
 
     res.json({
       success: true,
@@ -403,7 +403,7 @@ app.get('/test-voice', async (req, res) => {
   try {
     console.log('🧪 Testing Arabella voice...');
     
-    const testText = "Hello! This is Arabella speaking. I'm your friendly AI girlfriend.";
+    const testText = "Hello! This is SamyBear speaking. I'm your curious teddy bear friend!";
     
     const result = await generateSpeech(testText, {
       stability: 0.71,

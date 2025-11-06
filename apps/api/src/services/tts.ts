@@ -6,12 +6,13 @@
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
+import { enhanceTextWithDisfluencies } from './tts-disfluencies';
 
 const ELEVENLABS_API_URL = 'https://api.elevenlabs.io/v1';
 
-// Default voice ID for Candy (you can change this to any ElevenLabs voice)
-// This is "Arabella" voice - a warm, romantic female voice perfect for Candy
-const DEFAULT_VOICE_ID = 'aEO01A4wXwd1O8GPgGlF';
+// Default voice ID for SamyBear (child-friendly voice)
+// Using Samy Bear 4.0 voice - warm, gentle, expressive voice suitable for children (ages 5-10)
+const DEFAULT_VOICE_ID = process.env.ELEVENLABS_VOICE_ID || 'UgBBYS2sOqTuMpoF3BR0';
 
 export interface TTSOptions {
   voiceId?: string;
@@ -34,30 +35,41 @@ export interface TTSResult {
  */
 export async function generateSpeech(
   text: string,
-  options: TTSOptions = {}
+  options: TTSOptions & { emotion?: string } = {}
 ): Promise<TTSResult> {
   try {
     if (!process.env.ELEVENLABS_API_KEY) {
       throw new Error('ELEVENLABS_API_KEY is not configured');
     }
 
+    // Enhance text with natural disfluencies for SamyBear
+    const enhancedText = enhanceTextWithDisfluencies(text, options.emotion);
+    
     const voiceId = options.voiceId || DEFAULT_VOICE_ID;
     const stability = options.stability ?? 0.71; // Higher for more consistent voice
     const similarityBoost = options.similarityBoost ?? 0.85; // Higher for more expressive
-    const modelId = options.modelId || 'eleven_multilingual_v2';
+    
+    // ENGLISH-ONLY MODE: Use English-only TTS model
+    const ENGLISH_ONLY_MODE = process.env.ENGLISH_ONLY_MODE === 'true';
+    const modelId = ENGLISH_ONLY_MODE 
+      ? (options.modelId || 'eleven_monolingual_v1') // English-only model
+      : (options.modelId || 'eleven_multilingual_v2'); // Multilingual model
 
     console.log(`🔊 Generating speech with ElevenLabs...`);
-    console.log(`   Voice ID: ${voiceId} (Arabella)`);
-    console.log(`   Model: ${modelId}`);
+    console.log(`   Voice ID: ${voiceId} (Samy Bear 4.0)`);
+    console.log(`   Model: ${modelId}${ENGLISH_ONLY_MODE ? ' (ENGLISH-ONLY MODE)' : ' (MULTILINGUAL)'}`);
     console.log(`   Stability: ${stability}`);
     console.log(`   Similarity Boost: ${similarityBoost}`);
-    console.log(`   Text: "${text.substring(0, 50)}..."`);
+    console.log(`   Original text: "${text.substring(0, 50)}..."`);
+    if (enhancedText !== text) {
+      console.log(`   Enhanced text: "${enhancedText.substring(0, 50)}..."`);
+    }
 
     // Call ElevenLabs API
     const response = await axios.post(
       `${ELEVENLABS_API_URL}/text-to-speech/${voiceId}`,
       {
-        text,
+        text: enhancedText,
         model_id: modelId,
         voice_settings: {
           stability,
