@@ -5,7 +5,6 @@
  */
 
 import { RealtimeTranscriber } from 'assemblyai';
-import { Readable } from 'stream';
 
 export interface StreamingSTTResult {
   transcript: string;
@@ -54,15 +53,25 @@ export class AssemblyAIStreamingSTT {
     });
 
     // Handle partial transcripts (real-time updates)
-    this.transcriber.on('transcript', (transcript) => {
-      if (transcript.text) {
+    this.transcriber.on('transcript', (transcript: any) => {
+      if (transcript?.text) {
         this.transcript = transcript.text;
+      }
+
+      if (typeof transcript?.confidence === 'number') {
+        this.confidence = transcript.confidence;
+      }
+
+      if (typeof transcript?.languageCode === 'string') {
+        this.language = transcript.languageCode;
+      } else if (typeof transcript?.language === 'string') {
+        this.language = transcript.language;
+      }
+
+      if (typeof transcript?.isFinal === 'boolean') {
         this.isFinal = transcript.isFinal;
-        this.confidence = transcript.confidence || 0;
-        
-        if (transcript.languageCode) {
-          this.language = transcript.languageCode;
-        }
+      } else if (transcript?.message_type) {
+        this.isFinal = transcript.message_type === 'FinalTranscript';
       }
     });
 
@@ -72,12 +81,12 @@ export class AssemblyAIStreamingSTT {
     });
 
     // Handle session start
-    this.transcriber.on('session_start', () => {
+    this.transcriber.on('open', () => {
       console.log('✅ [ASSEMBLYAI-STREAMING] Session started');
     });
 
     // Handle session end
-    this.transcriber.on('session_end', () => {
+    this.transcriber.on('close', () => {
       console.log('🔌 [ASSEMBLYAI-STREAMING] Session ended');
     });
 
@@ -92,7 +101,12 @@ export class AssemblyAIStreamingSTT {
       throw new Error('Transcriber not started. Call start() first.');
     }
     
-    this.transcriber.sendAudio(audioChunk);
+    const arrayBuffer = audioChunk.buffer.slice(
+      audioChunk.byteOffset,
+      audioChunk.byteOffset + audioChunk.byteLength
+    );
+
+    await this.transcriber.sendAudio(arrayBuffer);
   }
 
   /**

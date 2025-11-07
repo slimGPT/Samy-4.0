@@ -5,6 +5,7 @@
 
 import 'dotenv/config';
 import admin from 'firebase-admin';
+import type { QueryDocumentSnapshot, DocumentData } from 'firebase-admin/firestore';
 import path from 'path';
 
 // Load environment variables from root .env (monorepo root)
@@ -157,7 +158,7 @@ export async function getAllEmotions() {
     const emotionsSnapshot = await db.collection('emotions').get();
     const emotions: Record<string, any> = {};
     
-    emotionsSnapshot.forEach(doc => {
+    emotionsSnapshot.forEach((doc: QueryDocumentSnapshot<DocumentData>) => {
       emotions[doc.id] = doc.data();
     });
     

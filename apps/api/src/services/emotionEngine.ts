@@ -106,6 +106,9 @@ const MOOD_ARCS = {
   
   // Evening/intimate progression
   evening: ['flirty', 'sweet', 'lazy'] as Emotion[],
+
+  // Deep conversation
+  deep: ['sweet', 'flirty', 'sweet'] as Emotion[],
   
   // Playful/teasing
   playful: ['sassy', 'flirty', 'sassy'] as Emotion[],
@@ -356,7 +359,7 @@ export async function processEmotionTransition(
     return emotionUpdate.current || currentState.current;
   } catch (error) {
     console.error('❌ Error processing emotion transition:', error);
-    return 'happy'; // Safe default
+    return 'flirty'; // Safe default within Emotion union
   }
 }
 

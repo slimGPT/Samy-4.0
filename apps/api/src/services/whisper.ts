@@ -7,7 +7,6 @@ import OpenAI from 'openai';
 import fs from 'fs';
 import path from 'path';
 import ffmpeg from 'fluent-ffmpeg';
-import { Readable } from 'stream';
 
 // Lazy-load OpenAI client to ensure env vars are loaded first
 let openai: OpenAI | null = null;
@@ -88,6 +87,7 @@ async function convertToMp3(inputPath: string): Promise<string> {
  */
 export async function transcribeAudioBuffer(audioBuffer: Buffer, mimeType: string = 'audio/webm'): Promise<string> {
   const startTime = Date.now();
+  let tempFilePath: string | null = null;
   
   try {
     if (!process.env.OPENAI_API_KEY) {
@@ -95,17 +95,13 @@ export async function transcribeAudioBuffer(audioBuffer: Buffer, mimeType: strin
     }
     
     console.log(`🎧 [WHISPER-BUFFER] Transcribing buffer directly (${audioBuffer.length} bytes)...`);
-    
-    // Create a readable stream from buffer (OpenAI SDK accepts Readable streams directly)
-    // Whisper API supports webm format, so no conversion needed!
-    const audioStream = Readable.from(audioBuffer);
-    
-    let tempFilePath: string | null = null;
-    
+
     try {
-      // Use Readable stream directly - OpenAI SDK accepts this in Node.js
+      // Use buffer directly - convert to File via OpenAI helper for Uploadable type
+      const extension = mimeType.split('/')[1] || 'webm';
+      const uploadable = await OpenAI.toFile(audioBuffer, `audio-buffer.${extension}`);
       const transcription = await getOpenAIClient().audio.transcriptions.create({
-        file: audioStream,
+        file: uploadable,
         model: 'whisper-1',
         response_format: 'text',
         language: 'en',

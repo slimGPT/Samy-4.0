@@ -76,37 +76,42 @@ export async function transcribeAudioStream(
     const transcribeDuration = Date.now() - transcribeStartTime;
     const totalDuration = Date.now() - startTime;
 
-    if (transcript.status === 'error') {
-      throw new Error(transcript.error || 'Transcription failed');
+    let finalTranscript = transcript;
+
+    if (finalTranscript.status === 'error') {
+      throw new Error(finalTranscript.error || 'Transcription failed');
     }
 
-    if (transcript.status === 'queued' || transcript.status === 'processing') {
+    if (finalTranscript.status === 'queued' || finalTranscript.status === 'processing') {
       // Poll for completion
-      console.log(`⏳ [ASSEMBLYAI-STT] Transcription ${transcript.status}, polling...`);
+      console.log(`⏳ [ASSEMBLYAI-STT] Transcription ${finalTranscript.status}, polling...`);
       let pollCount = 0;
       const maxPolls = 60; // 60 seconds max
       
-      while (transcript.status !== 'completed' && transcript.status !== 'error' && pollCount < maxPolls) {
+      while (
+        (finalTranscript.status === 'queued' || finalTranscript.status === 'processing') &&
+        pollCount < maxPolls
+      ) {
         await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
-        const updated = await client.transcripts.get(transcript.id);
+        const updated = await client.transcripts.get(finalTranscript.id);
         
         if (updated.status === 'completed') {
-          transcript.text = updated.text;
-          transcript.confidence = updated.confidence;
+          finalTranscript = updated;
           break;
         } else if (updated.status === 'error') {
           throw new Error(updated.error || 'Transcription failed');
         }
         
         pollCount++;
+        finalTranscript = updated;
       }
       
-      if (transcript.status !== 'completed') {
+      if (finalTranscript.status !== 'completed') {
         throw new Error('Transcription timeout');
       }
     }
 
-    const text = transcript.text || '';
+    const text = finalTranscript.text || '';
     if (!text) {
       throw new Error('Empty transcript received from AssemblyAI');
     }
@@ -118,7 +123,9 @@ export async function transcribeAudioStream(
     return {
       transcript: text.trim(),
       isFinal: true,
-      confidence: transcript.confidence,
+      confidence: typeof finalTranscript.confidence === 'number'
+        ? finalTranscript.confidence
+        : undefined,
       duration: totalDuration,
     };
   } catch (error: any) {

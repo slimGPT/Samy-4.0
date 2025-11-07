@@ -4,7 +4,7 @@
  * Implements early GPT generation when partial transcript is available
  */
 
-import { WebSocketServer, WebSocket } from 'ws';
+import { WebSocketServer, WebSocket, RawData } from 'ws';
 import { transcribeAudioBuffer } from '../services/whisper';
 import { chatMinimal } from '../services/gpt.minimal';
 import { analyzeSentiment, getEmotionEnergy } from '../services/sentiment';
@@ -35,7 +35,7 @@ export function setupSTTWebSocket(wss: WebSocketServer) {
     const audioChunks: Buffer[] = [];
     let lastTranscript = '';
     let gptReply: string | null = null;
-    let gptPromise: Promise<string> | null = null;
+    let gptPromise: Promise<string | null> | null = null;
     const sessionStartTime = Date.now();
     const timings: Record<string, number> = {};
     
@@ -48,7 +48,7 @@ export function setupSTTWebSocket(wss: WebSocketServer) {
     let chunkCount = 0;
     const PARTIAL_INTERVAL = 15; // Process partial transcript every 15 chunks
     
-    ws.on('message', async (data: Buffer) => {
+    ws.on('message', async (data: RawData) => {
       try {
         // Handle binary audio chunks
         if (Buffer.isBuffer(data)) {
@@ -131,7 +131,18 @@ export function setupSTTWebSocket(wss: WebSocketServer) {
         } else {
           // Handle JSON messages (control messages)
           try {
-            const message: STTWebSocketMessage = JSON.parse(data.toString());
+            let messageString: string;
+            if (typeof data === 'string') {
+              messageString = data;
+            } else if (Buffer.isBuffer(data)) {
+              messageString = data.toString();
+            } else if (Array.isArray(data)) {
+              messageString = Buffer.concat(data as Buffer[]).toString();
+            } else {
+              messageString = Buffer.from(data as ArrayBuffer).toString();
+            }
+
+            const message: STTWebSocketMessage = JSON.parse(messageString);
             
             if (message.type === 'end') {
               console.log('🛑 [WS-STT] Recording ended, processing final transcript...');
